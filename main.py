@@ -22,25 +22,25 @@ import os
 # Libreria para obterner la direccion
 from geopy.geocoders import Nominatim
 
-from mangum import Mangum
+
 
 app = FastAPI()
-handler = Mangum(app)
+
 
 # Configuración de la base de datos si esta en la nube 
-# db_config = {
-#     'host': '151.106.97.153',
-#     'user': 'u880599588_test',
-#     'password': 'HCwf9J9a',
-#     'database': 'u880599588_test'
-# }
+db_config = {
+     'host': '151.106.97.153',
+     'user': 'u880599588_test',
+     'password': 'HCwf9J9a',
+     'database': 'u880599588_test'
+}
 # Configuracion de la base de datos si esta de forma local
-db_config ={    
-    'host': 'localhost',
-    'user': 'root',
-    'password': '',
-    'database': 'presidencia'
-    }
+#db_config ={    
+#   'host': 'localhost',
+#    'user': 'root',
+#    'password': '',
+#    'database': 'presidencia'
+#    } 
 
 app.add_middleware(
     CORSMiddleware,
@@ -2439,7 +2439,7 @@ def borrar_fraccion(id_fraccion: int):
 
     return JSONResponse(content={"message": "Fraccion borrada correctamente", "id_fraccion": id_fraccion})
 
-@app.get("/año",status_code=status.HTTP_200_OK, summary="Endpoint para listar todos los años existentes", tags=['Años'])
+@app.get("/year",status_code=status.HTTP_200_OK, summary="Endpoint para listar todos los años existentes", tags=['Años'])
 def listar_años():
     connection = mysql.connector.connect(**db_config)
     cursor = connection.cursor()
@@ -2462,7 +2462,7 @@ def listar_años():
         cursor.close()
         connection.close()
 
-@app.get("/año/{id_año}",status_code=status.HTTP_200_OK, summary="Endpoint para buscar años en la bd", tags=['Años'])
+@app.get("/year/{id_año}",status_code=status.HTTP_200_OK, summary="Endpoint para buscar años en la bd", tags=['Años'])
 def detalle_año(id_año:int):
     connection = mysql.connector.connect(**db_config)
     cursor = connection.cursor()
@@ -2508,7 +2508,7 @@ def detalle_año(id_año:int):
         cursor.close()
         connection.close()
 
-@app.delete("/año/borrar/{id_año}", status_code=status.HTTP_200_OK, summary="Endpoint para borrar un año", tags=['Años'])
+@app.delete("/year/borrar/{id_año}", status_code=status.HTTP_200_OK, summary="Endpoint para borrar un año", tags=['Años'])
 def borrar_año(id_año: int):
     # Conectar a la base de datos
     connection = mysql.connector.connect(**db_config)
