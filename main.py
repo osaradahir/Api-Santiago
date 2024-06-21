@@ -1646,13 +1646,13 @@ def listar_preguntas():
         cursor.close()
         connection.close()
 
-@app.get("/pregunta/{id_pregunta}",status_code=status.HTTP_200_OK, summary="Endpoint para buscar una pregunta en la bd", tags=['Preguntas'])
-def detalle_pregunta(id_pregunta:int):
+@app.get("/pregunta/{id_encuesta}",status_code=status.HTTP_200_OK, summary="Endpoint para buscar una pregunta en la bd", tags=['Preguntas'])
+def detalle_pregunta(id_encuesta:int):
     connection = mysql.connector.connect(**db_config)
     cursor = connection.cursor()
     try:
-        query = "SELECT * FROM pregunta WHERE id_pregunta = %s"
-        cursor.execute(query, (id_pregunta,))
+        query = "SELECT * FROM pregunta WHERE id_encuesta = %s"
+        cursor.execute(query, (id_encuesta,))
         datos = cursor.fetchall()
         if datos:
             respuesta = []
@@ -1783,13 +1783,13 @@ def listar_opciones():
         cursor.close()
         connection.close()
 
-@app.get("/opcion/{id_opcion}",status_code=status.HTTP_200_OK, summary="Endpoint para buscar una opcion en la bd", tags=['Opciones'])
-def detalle_opcion(id_opcion:int):
+@app.get("/opcion/{id_encuesta}/{id_pregunta}",status_code=status.HTTP_200_OK, summary="Endpoint para buscar una opcion en la bd", tags=['Opciones'])
+def detalle_opcion(id_encuesta:int, id_pregunta:int):
     connection = mysql.connector.connect(**db_config)
     cursor = connection.cursor()
     try:
-        query = "SELECT * FROM opcion WHERE id_opcion = %s"
-        cursor.execute(query, (id_opcion,))
+        query = "SELECT * FROM opcion WHERE id_encuesta = %s AND id_pregunta = %s"
+        cursor.execute(query, (id_encuesta, id_pregunta))
         datos = cursor.fetchall()
         if datos:
             respuesta = []
@@ -1848,7 +1848,7 @@ def crear_opcion(opcion: Opciones):
     finally:
         cursor.close()
         connection.close()
-        
+
 @app.put("/opcion/editar/{id_opcion}", status_code=status.HTTP_200_OK, summary="Endpoint para editar una opcion", tags=['Opciones'])
 def editar_opcion(opcion:EditarOpcion, id_opcion: int):
     connection = mysql.connector.connect(**db_config)
