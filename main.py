@@ -1809,33 +1809,32 @@ def detalle_opcion(id_opcion:int):
         cursor.close()
         connection.close()
 
+
 @app.post("/opcion/crear", status_code=status.HTTP_200_OK, summary="Endpoint para crear una opcion", tags=['Opciones'])
-def crear_opcion(opcion:Opciones):
+def crear_opcion(opcion: Opciones):
     connection = mysql.connector.connect(**db_config)
     cursor = connection.cursor()
     try:
-        # Verificar si el id_encuesta existe en la tabla encuestas
-        query_check_encuesta = "SELECT 1 FROM encuestas WHERE id_encuesta = %s"
+        # Verificar si la encuesta existe
+        query_check_encuesta = "SELECT id_encuesta FROM encuestas WHERE id_encuesta = %s"
         cursor.execute(query_check_encuesta, (opcion.id_encuesta,))
         if cursor.fetchone() is None:
-            raise HTTPException(status_code=404, detail="La encuesta no existe")
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="La encuesta no existe")
         
-        # Verificar si el id_pregunta existe en la tabla encuestas
-        query_check_pregunta_1 = "SELECT 1 FROM preguntas WHERE id_pregunta = %s"
-        cursor.execute(query_check_pregunta_1, (opcion.id_pregunta,))
-        if cursor.fetchone() is None:
-            raise HTTPException(status_code=404, detail="La pregunta no existe")
-        
-        # Verificar si el id_pregunta existe en la tabla encuestas
-        query_check_pregunta_1 = "SELECT 1 FROM preguntas WHERE id_pregunta = %s AND pregunta_abierta = %s"
-        cursor.execute(query_check_pregunta_1, (opcion.id_pregunta,'1'))
-        if cursor.fetchone() is not None:
-            raise HTTPException(status_code=404, detail="La pregunta es abierta, porque deberia tener opciones????")
+        # Verificar si la pregunta existe
+        query_check_pregunta = "SELECT id_pregunta, tipo FROM preguntas WHERE id_pregunta = %s"
+        cursor.execute(query_check_pregunta, (opcion.id_pregunta,))
+        pregunta = cursor.fetchone()
+        if pregunta is None:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="La pregunta no existe")
 
-        # Insertar nuevo evento en la base de datos
-        query = "INSERT INTO opcion (id_pregunta, id_encuesta, opcion) VALUES (%s,%s,%s)"
-        evento_data = (opcion.id_pregunta, opcion.id_encuesta, opcion.opcion)
-        cursor.execute(query, evento_data)
+        # Verificar si la pregunta es de tipo 'text'
+        if pregunta[1] == 'text':
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="La pregunta es abierta y no debería tener opciones")
+
+        # Insertar la opción en la base de datos
+        query = "INSERT INTO opcion (id_pregunta, id_encuesta, opcion) VALUES (%s, %s, %s)"
+        cursor.execute(query, (opcion.id_pregunta, opcion.id_encuesta, opcion.opcion))
         connection.commit()
         return {
             'id_pregunta': opcion.id_pregunta,
@@ -1844,12 +1843,12 @@ def crear_opcion(opcion:Opciones):
         }
     except mysql.connector.Error as err:
         # Manejar errores de la base de datos
-        print(f"Error al insertar pregunta en la base de datos: {err}")
-        raise HTTPException(status_code=500, detail="Error interno al crear una opcion")
+        print(f"Error al insertar opción en la base de datos: {err}")
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Error interno al crear una opción")
     finally:
         cursor.close()
         connection.close()
-
+        
 @app.put("/opcion/editar/{id_opcion}", status_code=status.HTTP_200_OK, summary="Endpoint para editar una opcion", tags=['Opciones'])
 def editar_opcion(opcion:EditarOpcion, id_opcion: int):
     connection = mysql.connector.connect(**db_config)
