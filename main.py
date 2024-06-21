@@ -1641,7 +1641,7 @@ def obtener_encuesta(id_encuesta: int):
         for pregunta in preguntas:
             if pregunta['tipo'] in ['radio', 'checkbox']:
                 # Obtener opciones para la pregunta
-                query_opciones = "SELECT id_opcion, opcion FROM opciones WHERE id_pregunta = %s"
+                query_opciones = "SELECT id_opcion, opcion FROM opcion WHERE id_pregunta = %s"
                 cursor.execute(query_opciones, (pregunta['id_pregunta'],))
                 opciones = cursor.fetchall()
                 pregunta['opciones'] = opciones
