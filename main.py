@@ -1621,6 +1621,41 @@ def borrar_encuesta(id_encuesta: int):
 
     return JSONResponse(content={"message": "Aviso borrado correctamente", "aviso_id": id_encuesta})
 
+@app.get("/buscador_encuesta/{id_encuesta}", status_code=200, summary="Endpoint para buscar una encuesta completa", tags=['Encuestas'])
+def obtener_encuesta(id_encuesta: int):
+    connection = mysql.connector.connect(**db_config)
+    cursor = connection.cursor(dictionary=True)
+    try:
+        # Obtener título de la encuesta
+        query_encuesta = "SELECT id_encuesta, titulo FROM encuestas WHERE id_encuesta = %s"
+        cursor.execute(query_encuesta, (id_encuesta,))
+        encuesta = cursor.fetchone()
+        if not encuesta:
+            raise HTTPException(status_code=404, detail="Encuesta no encontrada")
+
+        # Obtener preguntas relacionadas a la encuesta
+        query_preguntas = "SELECT id_pregunta, pregunta, tipo FROM preguntas WHERE id_encuesta = %s"
+        cursor.execute(query_preguntas, (id_encuesta,))
+        preguntas = cursor.fetchall()
+
+        for pregunta in preguntas:
+            if pregunta['tipo'] in ['radio', 'checkbox']:
+                # Obtener opciones para la pregunta
+                query_opciones = "SELECT id_opcion, opcion FROM opciones WHERE id_pregunta = %s"
+                cursor.execute(query_opciones, (pregunta['id_pregunta'],))
+                opciones = cursor.fetchall()
+                pregunta['opciones'] = opciones
+
+        encuesta['preguntas'] = preguntas
+        return encuesta
+    except mysql.connector.Error as err:
+        print(f"Error al obtener datos de la encuesta: {err}")
+        raise HTTPException(status_code=500, detail="Error interno del servidor")
+    finally:
+        cursor.close()
+        connection.close()
+
+
 @app.get("/pregunta",status_code=status.HTTP_200_OK, summary="Endpoint para listar todas las encuestas existentes", tags=['Preguntas'])
 def listar_preguntas():
     connection = mysql.connector.connect(**db_config)
