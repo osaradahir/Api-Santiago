@@ -1533,7 +1533,7 @@ def detalle_encuesta(id_encuesta:int):
     connection = mysql.connector.connect(**db_config)
     cursor = connection.cursor()
     try:
-        query = "SELECT * FROM encuesta WHERE id_encuesta = %s"
+        query = "SELECT * FROM encuestas WHERE id_encuesta = %s"
         cursor.execute(query, (id_encuesta,))
         datos = cursor.fetchall()
         if datos:
@@ -1651,7 +1651,7 @@ def detalle_pregunta(id_encuesta:int):
     connection = mysql.connector.connect(**db_config)
     cursor = connection.cursor()
     try:
-        query = "SELECT * FROM pregunta WHERE id_encuesta = %s"
+        query = "SELECT * FROM preguntas WHERE id_encuesta = %s"
         cursor.execute(query, (id_encuesta,))
         datos = cursor.fetchall()
         if datos:
