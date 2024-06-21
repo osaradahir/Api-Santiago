@@ -3276,7 +3276,6 @@ def detalle_exPresidente(id_expresidente: int):
     finally:
         cursor.close()
         connection.close()
-
 # Crear un nuevo expresidente
 @app.post("/expresidente/crear", status_code=status.HTTP_200_OK, summary="Endpoint para crear un nuevo expresidente", tags=['Expresidentes'])
 async def crear_exPresidente(
@@ -3287,8 +3286,13 @@ async def crear_exPresidente(
     connection = mysql.connector.connect(**db_config)
     cursor = connection.cursor()
 
+    # Crear carpeta temp si no existe
+    temp_dir = "static/temp"
+    if not os.path.exists(temp_dir):
+        os.makedirs(temp_dir, exist_ok=True)
+
     # Guardar temporalmente el archivo
-    file_location = f"static/temp/{file.filename}"
+    file_location = f"{temp_dir}/{file.filename}"
     with open(file_location, "wb") as buffer:
         shutil.copyfileobj(file.file, buffer)
 
@@ -3302,13 +3306,18 @@ async def crear_exPresidente(
     except Exception as e:
         raise HTTPException(status_code=400, detail="Archivo de imagen inválido")
 
+    # Crear carpeta final si no existe
+    final_dir = "static/images/expresidentes"
+    if not os.path.exists(final_dir):
+        os.makedirs(final_dir, exist_ok=True)
+
     # Mover el archivo al directorio final
-    final_location = f"static/images/expresidentes/{file.filename}"
+    final_location = f"{final_dir}/{file.filename}"
     shutil.move(file_location, final_location)
 
     # Insertar datos en la base de datos
     query = 'INSERT INTO expresidentes (nombre_expresidente, periodo, imagen, ruta) VALUES (%s,%s,%s,%s)'
-    data = (nombre_expresidente, periodo, file.filename, 'static/images/expresidentes/')
+    data = (nombre_expresidente, periodo, file.filename, final_dir)
     cursor.execute(query, data)
     connection.commit()
 
@@ -3316,7 +3325,7 @@ async def crear_exPresidente(
         'nombre_expresidente': nombre_expresidente,
         'periodo': periodo,
         'imagen': file.filename,
-        'ruta': 'static/images/expresidentes/'
+        'ruta': final_dir
     })
 
 @app.put("/expresidente/editar/{id_expresidente}", status_code=status.HTTP_200_OK, summary="Endpoint para editar un expresidente existente", tags=['Expresidentes'])
