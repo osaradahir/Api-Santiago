@@ -96,8 +96,7 @@ class Encuestas(BaseModel):
 class Preguntas(BaseModel):
     id_encuesta: int
     pregunta: str
-    pregunta_abierta: int
-    pregunta_cerrada_multiple: int
+    tipo: str
 
 class EditarPregunta(BaseModel):
     pregunta:str
@@ -1636,8 +1635,7 @@ def listar_preguntas():
                     'id_pregunta': row[0],
                     'id_encuesta': row[1],
                     'pregunta': row[2],
-                    'pregunta_abierta':row[3],
-                    'pregunta_cerrada_multiple':row[4]
+                    'tipo':row[3]
                 }
                 respuesta.append(dato)
             
@@ -1663,8 +1661,7 @@ def detalle_pregunta(id_pregunta:int):
                     'id_pregunta': row[0],
                     'id_encuesta': row[1],
                     'pregunta': row[2],
-                    'pregunta_abierta':row[3],
-                    'pregunta_cerrada_multiple':row[4]
+                    'tipo':row[3]
                 }
                 respuesta.append(dato)
 
@@ -1681,20 +1678,18 @@ def crear_pregunta(pregunta: Preguntas):
     cursor = connection.cursor()
     try:
         # Verificar si el id_encuesta existe en la tabla encuestas
-        query_check_encuesta = "SELECT 1 FROM encuestas WHERE id_encuesta = %s"
+        query_check_encuesta = "SELECT id_encuesta FROM encuestas WHERE id_encuesta = %s"
         cursor.execute(query_check_encuesta, (pregunta.id_encuesta,))
         if cursor.fetchone() is None:
             raise HTTPException(status_code=404, detail="La encuesta no existe")
         
         # Validar los valores de pregunta_abierta y pregunta_cerrada_multiple
-        if pregunta.pregunta_abierta not in [0, 1]:
-            raise HTTPException(status_code=400, detail="El valor de 'pregunta_abierta' debe ser '0' o '1'")
-        if pregunta.pregunta_cerrada_multiple not in [0, 1]:
-            raise HTTPException(status_code=400, detail="El valor de 'pregunta_cerrada_multiple' debe ser '0' o '1'")
+        if pregunta.tipo not in ['text', 'radio', 'checkbox']:
+            raise HTTPException(status_code=400, detail="El valor de 'pregunta_abierta' debe ser text, radio, checkbox")
         
         # Insertar nueva pregunta en la base de datos
-        query = "INSERT INTO preguntas (id_encuesta, pregunta, pregunta_abierta, pregunta_cerrada_multiple) VALUES (%s,%s,%s,%s)"
-        pregunta_data = (pregunta.id_encuesta, pregunta.pregunta, pregunta.pregunta_abierta, pregunta.pregunta_cerrada_multiple)
+        query = "INSERT INTO preguntas (id_encuesta, pregunta, tipo) VALUES (%s,%s,%s)"
+        pregunta_data = (pregunta.id_encuesta, pregunta.pregunta, pregunta.tipo)
         cursor.execute(query, pregunta_data)
         connection.commit()
         
@@ -1705,8 +1700,7 @@ def crear_pregunta(pregunta: Preguntas):
             'id_pregunta': pregunta_id,
             'id_encuesta': pregunta.id_encuesta,
             'pregunta': pregunta.pregunta,
-            'pregunta_abierta': pregunta.pregunta_abierta,
-            'pregunta_cerrada_multiple': pregunta.pregunta_cerrada_multiple
+            'tipo': pregunta.tipo
         }
     except mysql.connector.Error as err:
         # Manejar errores de la base de datos
@@ -1722,7 +1716,7 @@ def editar_pregunta(pregunta: EditarPregunta, id_pregunta: int):
     cursor = connection.cursor()
     try:
         # Verificar si el id_encuesta existe en la tabla encuestas
-        query_check_encuesta = "SELECT 1 FROM encuestas WHERE id_encuesta = %s"
+        query_check_encuesta = "SELECT id_encuesta FROM encuestas WHERE id_encuesta = %s"
         cursor.execute(query_check_encuesta, (pregunta.id_encuesta,))
         if cursor.fetchone() is None:
             raise HTTPException(status_code=404, detail="La encuesta no existe")
