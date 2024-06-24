@@ -1761,20 +1761,25 @@ def editar_pregunta(pregunta: EditarPregunta, id_pregunta: int):
         
         # Actualizar pregunta en la base de datos
         query = "UPDATE preguntas SET pregunta = %s WHERE id_pregunta = %s"
-        evento_data = (pregunta.pregunta, id_pregunta)
-        cursor.execute(query, evento_data)
+        pregunta_data = (pregunta.pregunta, id_pregunta)
+        cursor.execute(query, pregunta_data)
         connection.commit()
+
+        if cursor.rowcount == 0:
+            raise HTTPException(status_code=404, detail=f"No se encontró la pregunta con id_pregunta {id_pregunta}")
+
         return {
-            'detail': 'pregunta actualizada correctamente',
+            'detail': 'Pregunta actualizada correctamente',
             'pregunta': pregunta.pregunta
         }
     except mysql.connector.Error as err:
         # Manejar errores de la base de datos
         print(f"Error al actualizar la pregunta en la base de datos: {err}")
-        raise HTTPException(status_code=500, detail="Error interno al actualizar pregunta")
+        raise HTTPException(status_code=500, detail="Error interno al actualizar la pregunta")
     finally:
         cursor.close()
         connection.close()
+
 
 @app.delete("/pregunta/borrar/{id_pregunta}", status_code=status.HTTP_200_OK, summary="Endpoint para borrar una encuesta", tags=['Preguntas'])
 def borrar_pregunta(id_pregunta: int):
