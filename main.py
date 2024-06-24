@@ -1844,7 +1844,6 @@ def detalle_opcion(id_encuesta:int, id_pregunta:int):
         cursor.close()
         connection.close()
 
-
 @app.post("/opcion/crear", status_code=status.HTTP_200_OK, summary="Endpoint para crear una opcion", tags=['Opciones'])
 def crear_opcion(opcion: Opciones):
     connection = mysql.connector.connect(**db_config)
@@ -1883,7 +1882,7 @@ def crear_opcion(opcion: Opciones):
     finally:
         cursor.close()
         connection.close()
-
+        
 @app.put("/opcion/editar/{id_opcion}", status_code=status.HTTP_200_OK, summary="Endpoint para editar una opcion", tags=['Opciones'])
 def editar_opcion(opcion: EditarOpcion, id_opcion: int):
     connection = mysql.connector.connect(**db_config)
