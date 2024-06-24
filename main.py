@@ -1761,7 +1761,7 @@ def editar_pregunta(pregunta: EditarPregunta, id_pregunta: int):
         
         # Actualizar pregunta en la base de datos
         query = "UPDATE preguntas SET pregunta = %s WHERE id_pregunta = %s"
-        evento_data = (pregunta.pregunta)
+        evento_data = (pregunta.pregunta, id_pregunta)
         cursor.execute(query, evento_data)
         connection.commit()
         return {
