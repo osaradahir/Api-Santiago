@@ -99,7 +99,10 @@ class Preguntas(BaseModel):
     tipo: str
 
 class EditarPregunta(BaseModel):
-    pregunta:str
+    id_pregunta: int
+    pregunta: str
+    tipo: str
+    id_encuesta: int
 
 class Opciones(BaseModel):
     id_pregunta:int
