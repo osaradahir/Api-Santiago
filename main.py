@@ -1885,13 +1885,13 @@ def crear_opcion(opcion: Opciones):
         connection.close()
 
 @app.put("/opcion/editar/{id_opcion}", status_code=status.HTTP_200_OK, summary="Endpoint para editar una opcion", tags=['Opciones'])
-def editar_opcion(opcion:EditarOpcion, id_opcion: int):
+def editar_opcion(opcion: EditarOpcion, id_opcion: int):
     connection = mysql.connector.connect(**db_config)
     cursor = connection.cursor()
     try:
-        # Actualizar pregunta en la base de datos
+        # Actualizar opción en la base de datos
         query = "UPDATE opcion SET opcion = %s WHERE id_opcion = %s"
-        evento_data = (opcion, id_opcion)
+        evento_data = (opcion.opcion, id_opcion)
         cursor.execute(query, evento_data)
         connection.commit()
         return {
