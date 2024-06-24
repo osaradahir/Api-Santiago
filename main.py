@@ -98,11 +98,6 @@ class Preguntas(BaseModel):
     pregunta: str
     tipo: str
 
-class EditarPregunta(BaseModel):
-    id_pregunta: int
-    pregunta: str
-    tipo: str
-    id_encuesta: int
 
 class Opciones(BaseModel):
     id_pregunta:int
@@ -1749,7 +1744,7 @@ def crear_pregunta(pregunta: Preguntas):
         connection.close()
         
 @app.put("/pregunta/editar/{id_pregunta}", status_code=status.HTTP_200_OK, summary="Endpoint para editar una pregunta", tags=['Preguntas'])
-def editar_pregunta(pregunta: EditarPregunta, id_pregunta: int):
+def editar_pregunta(pregunta: Preguntas, id_pregunta: int):
     connection = mysql.connector.connect(**db_config)
     cursor = connection.cursor()
     try:
@@ -1764,9 +1759,6 @@ def editar_pregunta(pregunta: EditarPregunta, id_pregunta: int):
         pregunta_data = (pregunta.pregunta, id_pregunta)
         cursor.execute(query, pregunta_data)
         connection.commit()
-
-        if cursor.rowcount == 0:
-            raise HTTPException(status_code=404, detail=f"No se encontró la pregunta con id_pregunta {id_pregunta}")
 
         return {
             'detail': 'Pregunta actualizada correctamente',
