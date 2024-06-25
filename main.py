@@ -3422,3 +3422,136 @@ async def borrar_exPresidente(id_expresidente: int):
         os.remove(file_path)
 
     return JSONResponse(content={"message": "Expresidente borrado correctamente", "id_expresidente": id_expresidente})
+
+    @app.get("/buzon",status_code=status.HTTP_200_OK, summary="Endpoint para listar todos los colores existentes", tags=['Buzon'])
+def listar_buzon():
+    connection = mysql.connector.connect(**db_config)
+    cursor = connection.cursor()
+    try:
+        cursor.execute("SELECT * FROM buzon_ciudadano")
+        datos = cursor.fetchall()
+        if datos:
+            respuesta = []
+            for row in datos:
+                dato = {
+                    'id_buzon':row[0],
+                    'nombre':row[1],
+                    'telefono': row[2],
+                    'correo': row[3],
+                    'comentarios':row[4],
+                    'dia': row[5]
+                }
+                respuesta.append(dato)
+            
+            return respuesta
+        else:
+            raise HTTPException(status_code=404, detail="No hay quejas ni sugerencias en la Base de datos")
+    finally:
+        cursor.close()
+        connection.close()
+
+@app.get("/buzon/ordenado", status_code=status.HTTP_200_OK, summary="Endpoint para listar todos los colores existentes", tags=['Buzon'])
+def listar_buzon_ordenado():
+    connection = mysql.connector.connect(**db_config)
+    cursor = connection.cursor()
+    try:
+        cursor.execute("SELECT * FROM buzon_ciudadano ORDER BY dia DESC")
+        datos = cursor.fetchall()
+        if datos:
+            respuesta = []
+            for row in datos:
+                dato = {
+                    'id_buzon': row[0],
+                    'nombre': row[1],
+                    'telefono': row[2],
+                    'correo': row[3],
+                    'comentarios': row[4],
+                    'dia': row[5]
+                }
+                respuesta.append(dato)
+            
+            return respuesta
+        else:
+            raise HTTPException(status_code=404, detail="No hay quejas ni sugerencias en la Base de datos")
+    finally:
+        cursor.close()
+        connection.close()
+
+@app.get("/buzon/{id_buzon}",status_code=status.HTTP_200_OK, summary="Endpoint para buscar quejas en la bd", tags=['Buzon'])
+def detalle_buzon(id_buzon:int):
+    connection = mysql.connector.connect(**db_config)
+    cursor = connection.cursor()
+    try:
+        query = "SELECT * FROM buzon_ciudadano WHERE id_buzon = %s"
+        cursor.execute(query, (id_buzon,))
+        datos = cursor.fetchall()
+        if datos:
+            respuesta = []
+            for row in datos:
+                dato = {
+                    'id_buzon':row[0],
+                    'nombre':row[1],
+                    'telefono': row[2],
+                    'correo': row[3],
+                    'comentarios':row[4],
+                    'dia': row[5]
+                }
+                respuesta.append(dato)
+
+            return respuesta
+        else:
+            raise HTTPException(status_code=404, detail="No existe un color con ese id en la Base de datos")
+    finally:
+        cursor.close()
+        connection.close()
+
+@app.post("/buzon/crear", status_code=status.HTTP_200_OK, summary="Endpoint para poner una queja o sugerencia", tags=['Buzon'])
+def crear_buzon(buzon: Buzon):
+    connection = mysql.connector.connect(**db_config)
+    cursor = connection.cursor()
+    try:
+        # Obtener la fecha de hoy
+        fecha_hoy = datetime.datetime.today()
+
+        # Formatear la fecha en el formato YYYY-MM-DD
+        fecha_hoy_str = fecha_hoy.strftime('%Y-%m-%d')
+
+        # Insertar una respuesta cerrada en la base de datos
+        query = "INSERT INTO buzon_ciudadano (nombre, telefono, correo, comentarios, dia) VALUES (%s, %s, %s, %s, %s)"
+        evento_data = (buzon.nombre, buzon.telefono, buzon.correo, buzon.comentarios, fecha_hoy_str)
+        cursor.execute(query, evento_data)
+        connection.commit()
+        return {
+            'nombre': buzon.nombre,
+            'telefono': buzon.telefono,
+            'correo': buzon.correo,
+            'comentarios': buzon.comentarios,
+            'dia': fecha_hoy_str
+        }
+    except mysql.connector.Error as err:
+        # Manejar errores de la base de datos
+        print(f"Error al insertar la sugerencia/queja en la base de datos: {err}")
+        raise HTTPException(status_code=500, detail="Error interno al crear sugerencia/queja")
+    finally:
+        cursor.close()
+        connection.close()
+
+
+@app.delete("/buzon/borrar/{id_buzon}", status_code=status.HTTP_200_OK, summary="Endpoint para borrar una queja/sugerencia", tags=['Buzon'])
+def borrar_buzon(id_buzon: int):
+    # Conectar a la base de datos
+    connection = mysql.connector.connect(**db_config)
+    cursor = connection.cursor()
+
+    # Verificar si la repuesta existe
+    cursor.execute("SELECT * FROM buzon_ciudadano WHERE id_buzon =%s", (id_buzon,))
+    aviso = cursor.fetchone()
+    
+    if not aviso:
+        raise HTTPException(status_code=404, detail="Color no encontrado")
+
+    # Eliminar el aviso de la base de datos
+    cursor.execute("DELETE FROM buzon_ciudadano WHERE id_buzon =%s", (id_buzon,))
+    connection.commit()
+
+    return JSONResponse(content={"message": "Queja/Sugerencia borrada correctamente", "id_buzon": id_buzon})
