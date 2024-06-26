@@ -3684,7 +3684,7 @@ def borrar_fraccion_conac(id_fraccion: int):
         connection.close()
 
 # Endpoint para listar todos los documentos
-@app.get("/documento", status_code=status.HTTP_200_OK, summary="Endpoint para listar todos los documentos existentes", tags=['Documentos'])
+@app.get("/documento-conac", status_code=status.HTTP_200_OK, summary="Endpoint para listar todos los documentos existentes", tags=['Documentos-Conac'])
 def listar_documentos():
     connection = mysql.connector.connect(**db_config)
     cursor = connection.cursor()
@@ -3711,7 +3711,7 @@ def listar_documentos():
         connection.close()
 
 # Endpoint para buscar un documento por id
-@app.get("/documento/{id_documento}", status_code=status.HTTP_200_OK, summary="Endpoint para buscar un documento en la bd", tags=['Documentos'])
+@app.get("/documento-conac/{id_documento}", status_code=status.HTTP_200_OK, summary="Endpoint para buscar un documento en la bd", tags=['Documentos-Conac'])
 def detalle_documento(id_documento: int):
     connection = mysql.connector.connect(**db_config)
     cursor = connection.cursor()
@@ -3736,7 +3736,7 @@ def detalle_documento(id_documento: int):
         connection.close()
 
 # Endpoint para buscar documentos por id de fracción
-@app.get("/documento/fraccion/{id_fraccion}", status_code=status.HTTP_200_OK, summary="Buscar documentos por ID de fracción", tags=['Documentos'])
+@app.get("/documento-conac/fraccion/{id_fraccion}", status_code=status.HTTP_200_OK, summary="Buscar documentos por ID de fracción", tags=['Documentos-Conac'])
 def buscar_documentos_por_fraccion(id_fraccion: int):
     connection = mysql.connector.connect(**db_config)
     cursor = connection.cursor()
@@ -3764,7 +3764,7 @@ def buscar_documentos_por_fraccion(id_fraccion: int):
         connection.close()
 
 # Endpoint para crear un documento
-@app.post("/documento/crear", status_code=status.HTTP_200_OK, summary="Endpoint para crear un documento", tags=['Documentos'])
+@app.post("/documento-conac/crear", status_code=status.HTTP_200_OK, summary="Endpoint para crear un documento", tags=['Documentos-Conac'])
 async def crear_documento(
     id_fraccion: int = Form(...),
     año: str = Form(...),
@@ -3810,7 +3810,7 @@ async def crear_documento(
         connection.close()
 
 # Endpoint para borrar un documento por id
-@app.delete("/documento/borrar/{id_documento}", status_code=status.HTTP_200_OK, summary="Endpoint para borrar un documento", tags=['Documentos'])
+@app.delete("/documento-conac/borrar/{id_documento}", status_code=status.HTTP_200_OK, summary="Endpoint para borrar un documento", tags=['Documentos-Conac'])
 def borrar_documento(id_documento: int):
     connection = mysql.connector.connect(**db_config)
     cursor = connection.cursor()
