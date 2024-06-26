@@ -164,6 +164,17 @@ class Buzon(BaseModel):
     correo: str
     comentarios: str 
 
+class Tomo(BaseModel):
+    nombre_tomo: str
+    descripcion: str 
+
+class Seccion(BaseModel):
+    nombre_seccion: str
+
+class FraccionConac(BaseModel):
+    nombre_fraccion: str
+
+
 app.mount("/static", StaticFiles(directory="static"),name="static")
 
 geolocator = Nominatim(user_agent="my-unique-application")
@@ -3339,3 +3350,496 @@ def borrar_buzon(id_buzon: int):
     connection.commit()
 
     return JSONResponse(content={"message": "Queja/Sugerencia borrada correctamente", "id_buzon": id_buzon})
+
+
+# Endpoint para listar todos los tomos
+@app.get("/tomo", status_code=status.HTTP_200_OK, summary="Endpoint para listar todos los tomos", tags=['Tomos'])
+def listar_tomos():
+    connection = mysql.connector.connect(**db_config)
+    cursor = connection.cursor()
+    try:
+        cursor.execute("SELECT * FROM tomos")
+        datos = cursor.fetchall()
+        if datos:
+            respuesta = []
+            for row in datos:
+                tomo = {
+                    'id_tomo': row[0],
+                    'nombre_tomo': row[1],
+                    'descripcion': row[2]
+                }
+                respuesta.append(tomo)
+            return respuesta
+        else:
+            raise HTTPException(status_code=404, detail="No hay tomos en la Base de datos")
+    finally:
+        cursor.close()
+        connection.close()
+
+# Endpoint para buscar un tomo por id
+@app.get("/tomo/{id_tomo}", status_code=status.HTTP_200_OK, summary="Endpoint para buscar un tomo por id", tags=['Tomos'])
+def detalle_tomo(id_tomo: int):
+    connection = mysql.connector.connect(**db_config)
+    cursor = connection.cursor()
+    try:
+        query = "SELECT * FROM tomos WHERE id_tomo = %s"
+        cursor.execute(query, (id_tomo,))
+        datos = cursor.fetchall()
+        if datos:
+            tomo = {
+                'id_tomo': datos[0][0],
+                'nombre_tomo': datos[0][1],
+                'descripcion': datos[0][2]
+            }
+            return tomo
+        else:
+            raise HTTPException(status_code=404, detail="No existe un tomo con ese id en la Base de datos")
+    finally:
+        cursor.close()
+        connection.close()
+
+# Endpoint para crear un tomo
+@app.post("/tomo/crear", status_code=status.HTTP_200_OK, summary="Endpoint para crear un tomo", tags=['Tomos'])
+def crear_tomo(tomo: Tomo):
+    connection = mysql.connector.connect(**db_config)
+    cursor = connection.cursor()
+    try:
+        query = "INSERT INTO tomos (nombre_tomo, descripcion) VALUES (%s, %s)"
+        tomo_data = (tomo.nombre_tomo, tomo.descripcion)
+        cursor.execute(query, tomo_data)
+        connection.commit()
+        return {
+            'nombre_tomo': tomo.nombre_tomo,
+            'descripcion': tomo.descripcion
+        }
+    except mysql.connector.Error as err:
+        print(f"Error al insertar tomo en la base de datos: {err}")
+        raise HTTPException(status_code=500, detail="Error interno al crear un tomo")
+    finally:
+        cursor.close()
+        connection.close()
+
+# Endpoint para editar un tomo por id
+@app.put("/tomo/editar/{id_tomo}", status_code=status.HTTP_200_OK, summary="Endpoint para editar un tomo por id", tags=['Tomos'])
+def editar_tomo(id_tomo: int, tomo: Tomo):
+    connection = mysql.connector.connect(**db_config)
+    cursor = connection.cursor()
+    try:
+        query = "UPDATE tomos SET nombre_tomo = %s, descripcion = %s WHERE id_tomo = %s"
+        tomo_data = (tomo.nombre_tomo, tomo.descripcion, id_tomo)
+        cursor.execute(query, tomo_data)
+        connection.commit()
+        return {
+            'id_tomo': id_tomo,
+            'nombre_tomo': tomo.nombre_tomo,
+            'descripcion': tomo.descripcion
+        }
+    except mysql.connector.Error as err:
+        print(f"Error al actualizar el tomo en la base de datos: {err}")
+        raise HTTPException(status_code=500, detail="Error interno al actualizar el tomo")
+    finally:
+        cursor.close()
+        connection.close()
+
+# Endpoint para borrar un tomo por id
+@app.delete("/tomo/borrar/{id_tomo}", status_code=status.HTTP_200_OK, summary="Endpoint para borrar un tomo por id", tags=['Tomos'])
+def borrar_tomo(id_tomo: int):
+    connection = mysql.connector.connect(**db_config)
+    cursor = connection.cursor()
+    try:
+        # Verificar si el tomo existe
+        cursor.execute("SELECT * FROM tomos WHERE id_tomo = %s", (id_tomo,))
+        tomo = cursor.fetchone()
+        if not tomo:
+            raise HTTPException(status_code=404, detail="Tomo no encontrado")
+        
+        # Eliminar el tomo de la base de datos
+        cursor.execute("DELETE FROM tomos WHERE id_tomo = %s", (id_tomo,))
+        connection.commit()
+
+        return JSONResponse(content={"message": "Tomo borrado correctamente", "id_tomo": id_tomo})
+    except mysql.connector.Error as err:
+        print(f"Error al borrar el tomo en la base de datos: {err}")
+        raise HTTPException(status_code=500, detail="Error interno al borrar el tomo")
+    finally:
+        cursor.close()
+        connection.close()
+
+# Endpoint para listar todas las secciones
+@app.get("/seccion", status_code=status.HTTP_200_OK, summary="Endpoint para listar todas las secciones", tags=['Secciones'])
+def listar_secciones():
+    connection = mysql.connector.connect(**db_config)
+    cursor = connection.cursor()
+    try:
+        cursor.execute("SELECT * FROM seccion")
+        datos = cursor.fetchall()
+        if datos:
+            respuesta = []
+            for row in datos:
+                seccion = {
+                    'id_seccion': row[0],
+                    'nombre_seccion': row[1]
+                }
+                respuesta.append(seccion)
+            return respuesta
+        else:
+            raise HTTPException(status_code=404, detail="No hay secciones en la Base de datos")
+    finally:
+        cursor.close()
+        connection.close()
+
+# Endpoint para buscar una seccion por id
+@app.get("/seccion/{id_seccion}", status_code=status.HTTP_200_OK, summary="Endpoint para buscar una seccion por id", tags=['Secciones'])
+def detalle_seccion(id_seccion: int):
+    connection = mysql.connector.connect(**db_config)
+    cursor = connection.cursor()
+    try:
+        query = "SELECT * FROM seccion WHERE id_seccion = %s"
+        cursor.execute(query, (id_seccion,))
+        datos = cursor.fetchall()
+        if datos:
+            seccion = {
+                'id_seccion': datos[0][0],
+                'nombre_seccion': datos[0][1]
+            }
+            return seccion
+        else:
+            raise HTTPException(status_code=404, detail="No existe una seccion con ese id en la Base de datos")
+    finally:
+        cursor.close()
+        connection.close()
+
+# Endpoint para crear una seccion
+@app.post("/seccion/crear", status_code=status.HTTP_200_OK, summary="Endpoint para crear una seccion", tags=['Secciones'])
+def crear_seccion(seccion: Seccion):
+    connection = mysql.connector.connect(**db_config)
+    cursor = connection.cursor()
+    try:
+        query = "INSERT INTO seccion (nombre_seccion) VALUES (%s)"
+        seccion_data = (seccion.nombre_seccion,)
+        cursor.execute(query, seccion_data)
+        connection.commit()
+        return {
+            'nombre_seccion': seccion.nombre_seccion
+        }
+    except mysql.connector.Error as err:
+        print(f"Error al insertar seccion en la base de datos: {err}")
+        raise HTTPException(status_code=500, detail="Error interno al crear una seccion")
+    finally:
+        cursor.close()
+        connection.close()
+
+# Endpoint para editar una seccion por id
+@app.put("/seccion/editar/{id_seccion}", status_code=status.HTTP_200_OK, summary="Endpoint para editar una seccion por id", tags=['Secciones'])
+def editar_seccion(id_seccion: int, seccion: Seccion):
+    connection = mysql.connector.connect(**db_config)
+    cursor = connection.cursor()
+    try:
+        query = "UPDATE seccion SET nombre_seccion = %s WHERE id_seccion = %s"
+        seccion_data = (seccion.nombre_seccion, id_seccion)
+        cursor.execute(query, seccion_data)
+        connection.commit()
+        return {
+            'id_seccion': id_seccion,
+            'nombre_seccion': seccion.nombre_seccion
+        }
+    except mysql.connector.Error as err:
+        print(f"Error al actualizar la seccion en la base de datos: {err}")
+        raise HTTPException(status_code=500, detail="Error interno al actualizar la seccion")
+    finally:
+        cursor.close()
+        connection.close()
+
+# Endpoint para borrar una seccion por id
+@app.delete("/seccion/borrar/{id_seccion}", status_code=status.HTTP_200_OK, summary="Endpoint para borrar una seccion por id", tags=['Secciones'])
+def borrar_seccion(id_seccion: int):
+    connection = mysql.connector.connect(**db_config)
+    cursor = connection.cursor()
+    try:
+        # Verificar si la seccion existe
+        cursor.execute("SELECT * FROM seccion WHERE id_seccion = %s", (id_seccion,))
+        seccion = cursor.fetchone()
+        if not seccion:
+            raise HTTPException(status_code=404, detail="Seccion no encontrada")
+        
+        # Eliminar la seccion de la base de datos
+        cursor.execute("DELETE FROM seccion WHERE id_seccion = %s", (id_seccion,))
+        connection.commit()
+
+        return JSONResponse(content={"message": "Seccion borrada correctamente", "id_seccion": id_seccion})
+    except mysql.connector.Error as err:
+        print(f"Error al borrar la seccion en la base de datos: {err}")
+        raise HTTPException(status_code=500, detail="Error interno al borrar la seccion")
+    finally:
+        cursor.close()
+        connection.close()
+
+# Endpoint para listar todas las fracciones CONAC
+@app.get("/fraccion-conac", status_code=status.HTTP_200_OK, summary="Endpoint para listar todas las fracciones CONAC", tags=['Fracciones CONAC'])
+def listar_fracciones_conac():
+    connection = mysql.connector.connect(**db_config)
+    cursor = connection.cursor()
+    try:
+        cursor.execute("SELECT * FROM fraccion_conac")
+        datos = cursor.fetchall()
+        if datos:
+            respuesta = []
+            for row in datos:
+                fraccion = {
+                    'id_fraccion': row[0],
+                    'nombre_fraccion': row[1]
+                }
+                respuesta.append(fraccion)
+            return respuesta
+        else:
+            raise HTTPException(status_code=404, detail="No hay fracciones CONAC en la Base de datos")
+    finally:
+        cursor.close()
+        connection.close()
+
+# Endpoint para buscar una fraccion CONAC por id
+@app.get("/fraccion-conac/{id_fraccion}", status_code=status.HTTP_200_OK, summary="Endpoint para buscar una fraccion CONAC por id", tags=['Fracciones CONAC'])
+def detalle_fraccion_conac(id_fraccion: int):
+    connection = mysql.connector.connect(**db_config)
+    cursor = connection.cursor()
+    try:
+        query = "SELECT * FROM fraccion_conac WHERE id_fraccion = %s"
+        cursor.execute(query, (id_fraccion,))
+        datos = cursor.fetchall()
+        if datos:
+            fraccion = {
+                'id_fraccion': datos[0][0],
+                'nombre_fraccion': datos[0][1]
+            }
+            return fraccion
+        else:
+            raise HTTPException(status_code=404, detail="No existe una fraccion CONAC con ese id en la Base de datos")
+    finally:
+        cursor.close()
+        connection.close()
+
+# Endpoint para crear una fraccion CONAC
+@app.post("/fraccion-conac/crear", status_code=status.HTTP_200_OK, summary="Endpoint para crear una fraccion CONAC", tags=['Fracciones CONAC'])
+def crear_fraccion_conac(fraccion: FraccionConac):
+    connection = mysql.connector.connect(**db_config)
+    cursor = connection.cursor()
+    try:
+        query = "INSERT INTO fraccion_conac (nombre_fraccion) VALUES (%s)"
+        fraccion_data = (fraccion.nombre_fraccion,)
+        cursor.execute(query, fraccion_data)
+        connection.commit()
+        return {
+            'nombre_fraccion': fraccion.nombre_fraccion
+        }
+    except mysql.connector.Error as err:
+        print(f"Error al insertar fraccion CONAC en la base de datos: {err}")
+        raise HTTPException(status_code=500, detail="Error interno al crear una fraccion CONAC")
+    finally:
+        cursor.close()
+        connection.close()
+
+# Endpoint para editar una fraccion CONAC por id
+@app.put("/fraccion-conac/editar/{id_fraccion}", status_code=status.HTTP_200_OK, summary="Endpoint para editar una fraccion CONAC por id", tags=['Fracciones CONAC'])
+def editar_fraccion_conac(id_fraccion: int, fraccion: FraccionConac):
+    connection = mysql.connector.connect(**db_config)
+    cursor = connection.cursor()
+    try:
+        query = "UPDATE fraccion_conac SET nombre_fraccion = %s WHERE id_fraccion = %s"
+        fraccion_data = (fraccion.nombre_fraccion, id_fraccion)
+        cursor.execute(query, fraccion_data)
+        connection.commit()
+        return {
+            'id_fraccion': id_fraccion,
+            'nombre_fraccion': fraccion.nombre_fraccion
+        }
+    except mysql.connector.Error as err:
+        print(f"Error al actualizar la fraccion CONAC en la base de datos: {err}")
+        raise HTTPException(status_code=500, detail="Error interno al actualizar la fraccion CONAC")
+    finally:
+        cursor.close()
+        connection.close()
+
+# Endpoint para borrar una fraccion CONAC por id
+@app.delete("/fraccion-conac/borrar/{id_fraccion}", status_code=status.HTTP_200_OK, summary="Endpoint para borrar una fraccion CONAC por id", tags=['Fracciones CONAC'])
+def borrar_fraccion_conac(id_fraccion: int):
+    connection = mysql.connector.connect(**db_config)
+    cursor = connection.cursor()
+    try:
+        # Verificar si la fraccion CONAC existe
+        cursor.execute("SELECT * FROM fraccion_conac WHERE id_fraccion = %s", (id_fraccion,))
+        fraccion = cursor.fetchone()
+        if not fraccion:
+            raise HTTPException(status_code=404, detail="Fraccion CONAC no encontrada")
+        
+        # Eliminar la fraccion CONAC de la base de datos
+        cursor.execute("DELETE FROM fraccion_conac WHERE id_fraccion = %s", (id_fraccion,))
+        connection.commit()
+
+        return JSONResponse(content={"message": "Fraccion CONAC borrada correctamente", "id_fraccion": id_fraccion})
+    except mysql.connector.Error as err:
+        print(f"Error al borrar la fraccion CONAC en la base de datos: {err}")
+        raise HTTPException(status_code=500, detail="Error interno al borrar la fraccion CONAC")
+    finally:
+        cursor.close()
+        connection.close()
+
+# Endpoint para listar todos los documentos
+@app.get("/documento", status_code=status.HTTP_200_OK, summary="Endpoint para listar todos los documentos existentes", tags=['Documentos'])
+def listar_documentos():
+    connection = mysql.connector.connect(**db_config)
+    cursor = connection.cursor()
+    try:
+        cursor.execute("SELECT * FROM documentos")
+        datos = cursor.fetchall()
+        if datos:
+            respuesta = []
+            for row in datos:
+                documento = {
+                    'id_documento': row[0],
+                    'documento': row[1],
+                    'ruta': row[2],
+                    'trimestre': row[3],
+                    'año': row[4],
+                    'id_fraccion': row[5]
+                }
+                respuesta.append(documento)
+            return respuesta
+        else:
+            raise HTTPException(status_code=404, detail="No hay documentos en la Base de datos")
+    finally:
+        cursor.close()
+        connection.close()
+
+# Endpoint para buscar un documento por id
+@app.get("/documento/{id_documento}", status_code=status.HTTP_200_OK, summary="Endpoint para buscar un documento en la bd", tags=['Documentos'])
+def detalle_documento(id_documento: int):
+    connection = mysql.connector.connect(**db_config)
+    cursor = connection.cursor()
+    try:
+        query = "SELECT * FROM documentos WHERE id_documento = %s"
+        cursor.execute(query, (id_documento,))
+        datos = cursor.fetchall()
+        if datos:
+            documento = {
+                'id_documento': datos[0][0],
+                'documento': datos[0][1],
+                'ruta': datos[0][2],
+                'trimestre': datos[0][3],
+                'año': datos[0][4],
+                'id_fraccion': datos[0][5]
+            }
+            return documento
+        else:
+            raise HTTPException(status_code=404, detail="No existe un documento con ese id en la Base de datos")
+    finally:
+        cursor.close()
+        connection.close()
+
+# Endpoint para buscar documentos por id de fracción
+@app.get("/documento/fraccion/{id_fraccion}", status_code=status.HTTP_200_OK, summary="Buscar documentos por ID de fracción", tags=['Documentos'])
+def buscar_documentos_por_fraccion(id_fraccion: int):
+    connection = mysql.connector.connect(**db_config)
+    cursor = connection.cursor()
+    try:
+        query = "SELECT * FROM documentos WHERE id_fraccion = %s"
+        cursor.execute(query, (id_fraccion,))
+        datos = cursor.fetchall()
+        if datos:
+            respuesta = []
+            for row in datos:
+                documento = {
+                    'id_documento': row[0],
+                    'documento': row[1],
+                    'ruta': row[2],
+                    'trimestre': row[3],
+                    'año': row[4],
+                    'id_fraccion': row[5]
+                }
+                respuesta.append(documento)
+            return respuesta
+        else:
+            raise HTTPException(status_code=404, detail="No existen documentos con esa fracción en la Base de datos")
+    finally:
+        cursor.close()
+        connection.close()
+
+# Endpoint para crear un documento
+@app.post("/documento/crear", status_code=status.HTTP_200_OK, summary="Endpoint para crear un documento", tags=['Documentos'])
+async def crear_documento(
+    id_fraccion: int = Form(...),
+    año: str = Form(...),
+    trimestre: str = Form(...),
+    file: UploadFile = File(...)):
+    connection = mysql.connector.connect(**db_config)
+    cursor = connection.cursor()
+    try:
+        # Obtener la fracción desde la base de datos
+        cursor.execute("SELECT * FROM fraccion_conac WHERE id_fraccion = %s", (id_fraccion,))
+        fraccion = cursor.fetchone()
+        if not fraccion:
+            raise HTTPException(status_code=404, detail="Fracción no encontrada")
+
+        # Crear la ruta del archivo con la estructura especificada
+        directory = f"static/conac/{str(id_fraccion)}/{str(año)}"
+        os.makedirs(directory, exist_ok=True)
+        file_location = os.path.join(directory, file.filename)
+
+        # Guardar el archivo localmente
+        with open(file_location, "wb") as f:
+            f.write(await file.read())
+
+        # Insertar documento en la base de datos
+        query = "INSERT INTO documentos (documento, ruta, trimestre, año, id_fraccion) VALUES (%s, %s, %s, %s, %s)"
+        documento_data = (file.filename, directory, trimestre, año, id_fraccion)
+        cursor.execute(query, documento_data)
+        connection.commit()
+
+        return {
+            'id_documento': cursor.lastrowid,
+            'documento': file.filename,
+            'ruta': directory,
+            'trimestre': trimestre,
+            'año': año,
+            'id_fraccion': id_fraccion
+        }
+    except mysql.connector.Error as err:
+        print(f"Error al insertar documento en la base de datos: {err}")
+        raise HTTPException(status_code=500, detail="Error interno al crear documento")
+    finally:
+        cursor.close()
+        connection.close()
+
+# Endpoint para borrar un documento por id
+@app.delete("/documento/borrar/{id_documento}", status_code=status.HTTP_200_OK, summary="Endpoint para borrar un documento", tags=['Documentos'])
+def borrar_documento(id_documento: int):
+    connection = mysql.connector.connect(**db_config)
+    cursor = connection.cursor()
+    try:
+        # Verificar si el documento existe y obtener su ruta
+        cursor.execute("SELECT documento, año, id_fraccion FROM documentos WHERE id_documento = %s", (id_documento,))
+        documento_data = cursor.fetchone()
+        if not documento_data:
+            raise HTTPException(status_code=404, detail="Documento no encontrado")
+        
+        documento, año, id_fraccion = documento_data
+
+        # Construir la ruta completa del archivo
+        file_location = f"static/conac/{str(id_fraccion)}/{str(año)}/{documento}"
+
+        # Eliminar el archivo localmente
+        if os.path.exists(file_location):
+            os.remove(file_location)
+        else:
+            raise HTTPException(status_code=404, detail="Archivo no encontrado en el sistema de archivos")
+
+        # Eliminar el documento de la base de datos
+        cursor.execute("DELETE FROM documentos WHERE id_documento = %s", (id_documento,))
+        connection.commit()
+
+        return JSONResponse(content={"message": "Documento borrado correctamente", "id_documento": id_documento})
+    except mysql.connector.Error as err:
+        print(f"Error al borrar documento en la base de datos: {err}")
+        raise HTTPException(status_code=500, detail="Error interno al borrar documento")
+    finally:
+        cursor.close()
+        connection.close()
