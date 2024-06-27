@@ -3689,18 +3689,19 @@ def listar_documentos():
     connection = mysql.connector.connect(**db_config)
     cursor = connection.cursor()
     try:
-        cursor.execute("SELECT * FROM documentos")
+        cursor.execute("SELECT * FROM documento_conac")
         datos = cursor.fetchall()
         if datos:
             respuesta = []
             for row in datos:
                 documento = {
                     'id_documento': row[0],
-                    'documento': row[1],
-                    'ruta': row[2],
-                    'trimestre': row[3],
-                    'año': row[4],
-                    'id_fraccion': row[5]
+                    'archivo': row[1],
+                    'nombre_tomo': row[2],
+                    'nombre_seccion': row[3],
+                    'trimestre_categoria': row[4],
+                    'nombre_fraccion': row[5],
+                    'año': row[6]
                 }
                 respuesta.append(documento)
             return respuesta
@@ -3716,17 +3717,18 @@ def detalle_documento(id_documento: int):
     connection = mysql.connector.connect(**db_config)
     cursor = connection.cursor()
     try:
-        query = "SELECT * FROM documentos WHERE id_documento = %s"
+        query = "SELECT * FROM documento_conac WHERE id_documento = %s"
         cursor.execute(query, (id_documento,))
-        datos = cursor.fetchall()
+        datos = cursor.fetchone()
         if datos:
             documento = {
-                'id_documento': datos[0][0],
-                'documento': datos[0][1],
-                'ruta': datos[0][2],
-                'trimestre': datos[0][3],
-                'año': datos[0][4],
-                'id_fraccion': datos[0][5]
+                'id_documento': datos[0],
+                'archivo': datos[1],
+                'nombre_tomo': datos[2],
+                'nombre_seccion': datos[3],
+                'trimestre_categoria': datos[4],
+                'nombre_fraccion': datos[5],
+                'año': datos[6]
             }
             return documento
         else:
@@ -3735,25 +3737,26 @@ def detalle_documento(id_documento: int):
         cursor.close()
         connection.close()
 
-# Endpoint para buscar documentos por id de fracción
-@app.get("/documento-conac/fraccion/{id_fraccion}", status_code=status.HTTP_200_OK, summary="Buscar documentos por ID de fracción", tags=['Documentos-Conac'])
-def buscar_documentos_por_fraccion(id_fraccion: int):
+# Endpoint para buscar documentos por nombre de fracción
+@app.get("/documento-conac/fraccion/{nombre_fraccion}", status_code=status.HTTP_200_OK, summary="Buscar documentos por nombre de fracción", tags=['Documentos-Conac'])
+def buscar_documentos_por_fraccion(nombre_fraccion: str):
     connection = mysql.connector.connect(**db_config)
     cursor = connection.cursor()
     try:
-        query = "SELECT * FROM documentos WHERE id_fraccion = %s"
-        cursor.execute(query, (id_fraccion,))
+        query = "SELECT * FROM documento_conac WHERE nombre_fraccion = %s"
+        cursor.execute(query, (nombre_fraccion,))
         datos = cursor.fetchall()
         if datos:
             respuesta = []
             for row in datos:
                 documento = {
                     'id_documento': row[0],
-                    'documento': row[1],
-                    'ruta': row[2],
-                    'trimestre': row[3],
-                    'año': row[4],
-                    'id_fraccion': row[5]
+                    'archivo': row[1],
+                    'nombre_tomo': row[2],
+                    'nombre_seccion': row[3],
+                    'trimestre_categoria': row[4],
+                    'nombre_fraccion': row[5],
+                    'año': row[6]
                 }
                 respuesta.append(documento)
             return respuesta
@@ -3766,21 +3769,17 @@ def buscar_documentos_por_fraccion(id_fraccion: int):
 # Endpoint para crear un documento
 @app.post("/documento-conac/crear", status_code=status.HTTP_200_OK, summary="Endpoint para crear un documento", tags=['Documentos-Conac'])
 async def crear_documento(
-    id_fraccion: int = Form(...),
+    nombre_tomo: str = Form(...),
+    nombre_seccion: str = Form(...),
+    trimestre_categoria: str = Form(...),
+    nombre_fraccion: str = Form(...),
     año: str = Form(...),
-    trimestre: str = Form(...),
     file: UploadFile = File(...)):
     connection = mysql.connector.connect(**db_config)
     cursor = connection.cursor()
     try:
-        # Obtener la fracción desde la base de datos
-        cursor.execute("SELECT * FROM fraccion_conac WHERE id_fraccion = %s", (id_fraccion,))
-        fraccion = cursor.fetchone()
-        if not fraccion:
-            raise HTTPException(status_code=404, detail="Fracción no encontrada")
-
         # Crear la ruta del archivo con la estructura especificada
-        directory = f"static/conac/{str(id_fraccion)}/{str(año)}"
+        directory = f"static/conac/{nombre_fraccion}/{año}"
         os.makedirs(directory, exist_ok=True)
         file_location = os.path.join(directory, file.filename)
 
@@ -3789,18 +3788,22 @@ async def crear_documento(
             f.write(await file.read())
 
         # Insertar documento en la base de datos
-        query = "INSERT INTO documentos (documento, ruta, trimestre, año, id_fraccion) VALUES (%s, %s, %s, %s, %s)"
-        documento_data = (file.filename, directory, trimestre, año, id_fraccion)
+        query = """
+        INSERT INTO documento_conac (archivo, nombre_tomo, nombre_seccion, trimestre_categoria, nombre_fraccion, año)
+        VALUES (%s, %s, %s, %s, %s, %s)
+        """
+        documento_data = (file.filename, nombre_tomo, nombre_seccion, trimestre_categoria, nombre_fraccion, año)
         cursor.execute(query, documento_data)
         connection.commit()
 
         return {
             'id_documento': cursor.lastrowid,
-            'documento': file.filename,
-            'ruta': directory,
-            'trimestre': trimestre,
-            'año': año,
-            'id_fraccion': id_fraccion
+            'archivo': file.filename,
+            'nombre_tomo': nombre_tomo,
+            'nombre_seccion': nombre_seccion,
+            'trimestre_categoria': trimestre_categoria,
+            'nombre_fraccion': nombre_fraccion,
+            'año': año
         }
     except mysql.connector.Error as err:
         print(f"Error al insertar documento en la base de datos: {err}")
@@ -3816,15 +3819,15 @@ def borrar_documento(id_documento: int):
     cursor = connection.cursor()
     try:
         # Verificar si el documento existe y obtener su ruta
-        cursor.execute("SELECT documento, año, id_fraccion FROM documentos WHERE id_documento = %s", (id_documento,))
+        cursor.execute("SELECT archivo, año, nombre_fraccion FROM documento_conac WHERE id_documento = %s", (id_documento,))
         documento_data = cursor.fetchone()
         if not documento_data:
             raise HTTPException(status_code=404, detail="Documento no encontrado")
         
-        documento, año, id_fraccion = documento_data
+        archivo, año, nombre_fraccion = documento_data
 
         # Construir la ruta completa del archivo
-        file_location = f"static/conac/{str(id_fraccion)}/{str(año)}/{documento}"
+        file_location = f"static/conac/{nombre_fraccion}/{año}/{archivo}"
 
         # Eliminar el archivo localmente
         if os.path.exists(file_location):
@@ -3833,7 +3836,7 @@ def borrar_documento(id_documento: int):
             raise HTTPException(status_code=404, detail="Archivo no encontrado en el sistema de archivos")
 
         # Eliminar el documento de la base de datos
-        cursor.execute("DELETE FROM documentos WHERE id_documento = %s", (id_documento,))
+        cursor.execute("DELETE FROM documento_conac WHERE id_documento = %s", (id_documento,))
         connection.commit()
 
         return JSONResponse(content={"message": "Documento borrado correctamente", "id_documento": id_documento})
