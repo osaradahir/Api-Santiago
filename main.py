@@ -3766,10 +3766,9 @@ def buscar_documentos_por_fraccion(nombre_fraccion: str):
         cursor.close()
         connection.close()
 
-# Endpoint para crear un documento
 @app.post("/documento-conac/crear", status_code=status.HTTP_200_OK, summary="Endpoint para crear un documento", tags=['Documentos-Conac'])
 async def crear_documento(
-    nombre_tomo: str = Form(...),
+    id_tomo: int = Form(...),
     nombre_seccion: str = Form(...),
     trimestre_categoria: str = Form(...),
     nombre_fraccion: str = Form(...),
@@ -3789,17 +3788,17 @@ async def crear_documento(
 
         # Insertar documento en la base de datos
         query = """
-        INSERT INTO documento_conac (archivo, nombre_tomo, nombre_seccion, trimestre_categoria, nombre_fraccion, año)
+        INSERT INTO documento_conac (archivo, id_tomo, nombre_seccion, trimestre_categoria, nombre_fraccion, año)
         VALUES (%s, %s, %s, %s, %s, %s)
         """
-        documento_data = (file.filename, nombre_tomo, nombre_seccion, trimestre_categoria, nombre_fraccion, año)
+        documento_data = (file.filename, id_tomo, nombre_seccion, trimestre_categoria, nombre_fraccion, año)
         cursor.execute(query, documento_data)
         connection.commit()
 
         return {
             'id_documento': cursor.lastrowid,
             'archivo': file.filename,
-            'nombre_tomo': nombre_tomo,
+            'id_tomo': id_tomo,
             'nombre_seccion': nombre_seccion,
             'trimestre_categoria': trimestre_categoria,
             'nombre_fraccion': nombre_fraccion,
@@ -3812,6 +3811,7 @@ async def crear_documento(
     finally:
         cursor.close()
         connection.close()
+
 
 # Endpoint para borrar un documento por id
 @app.delete("/documento-conac/borrar/{id_documento}", status_code=status.HTTP_200_OK, summary="Endpoint para borrar un documento", tags=['Documentos-Conac'])
