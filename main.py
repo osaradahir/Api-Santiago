@@ -3803,7 +3803,8 @@ async def crear_documento(
             'nombre_seccion': nombre_seccion,
             'trimestre_categoria': trimestre_categoria,
             'nombre_fraccion': nombre_fraccion,
-            'año': año
+            'año': año,
+            'ruta': file_location
         }
     except mysql.connector.Error as err:
         print(f"Error al insertar documento en la base de datos: {err}")
