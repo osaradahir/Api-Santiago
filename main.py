@@ -3769,16 +3769,17 @@ def buscar_documentos_por_fraccion(nombre_fraccion: str):
 @app.post("/documento-conac/crear", status_code=status.HTTP_200_OK, summary="Endpoint para crear un documento", tags=['Documentos-Conac'])
 async def crear_documento(
     id_tomo: int = Form(...),
-    nombre_seccion: str = Form(...),
+    id_seccion: int = Form(...),
     trimestre_categoria: str = Form(...),
-    nombre_fraccion: str = Form(...),
+    id_fraccion: int = Form(...),
     año: str = Form(...),
     file: UploadFile = File(...)):
+    
     connection = mysql.connector.connect(**db_config)
     cursor = connection.cursor()
     try:
         # Crear la ruta del archivo con la estructura especificada
-        directory = f"static/conac/{nombre_fraccion}/{año}"
+        directory = f"static/conac/{id_fraccion}/{año}"
         os.makedirs(directory, exist_ok=True)
         file_location = os.path.join(directory, file.filename)
 
@@ -3788,10 +3789,10 @@ async def crear_documento(
 
         # Insertar documento en la base de datos
         query = """
-        INSERT INTO documento_conac (archivo, id_tomo, nombre_seccion, trimestre_categoria, nombre_fraccion, año)
-        VALUES (%s, %s, %s, %s, %s, %s)
+        INSERT INTO documento_conac (archivo, id_tomo, id_seccion, trimestre_categoria, id_fraccion, año, ruta)
+        VALUES (%s, %s, %s, %s, %s, %s, %s)
         """
-        documento_data = (file.filename, id_tomo, nombre_seccion, trimestre_categoria, nombre_fraccion, año)
+        documento_data = (file.filename, id_tomo, id_seccion, trimestre_categoria, id_fraccion, año, file_location)
         cursor.execute(query, documento_data)
         connection.commit()
 
@@ -3799,9 +3800,9 @@ async def crear_documento(
             'id_documento': cursor.lastrowid,
             'archivo': file.filename,
             'id_tomo': id_tomo,
-            'nombre_seccion': nombre_seccion,
+            'id_seccion': id_seccion,
             'trimestre_categoria': trimestre_categoria,
-            'nombre_fraccion': nombre_fraccion,
+            'id_fraccion': id_fraccion,
             'año': año,
             'ruta': file_location
         }
@@ -3811,7 +3812,6 @@ async def crear_documento(
     finally:
         cursor.close()
         connection.close()
-
 
 # Endpoint para borrar un documento por id
 @app.delete("/documento-conac/borrar/{id_documento}", status_code=status.HTTP_200_OK, summary="Endpoint para borrar un documento", tags=['Documentos-Conac'])
