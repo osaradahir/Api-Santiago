@@ -3683,7 +3683,6 @@ def borrar_fraccion_conac(id_fraccion: int):
         cursor.close()
         connection.close()
 
-# Endpoint para listar todos los documentos
 @app.get("/documento-conac", status_code=status.HTTP_200_OK, summary="Endpoint para listar todos los documentos existentes", tags=['Documentos-Conac'])
 def listar_documentos():
     connection = mysql.connector.connect(**db_config)
@@ -3697,11 +3696,12 @@ def listar_documentos():
                 documento = {
                     'id_documento': row[0],
                     'archivo': row[1],
-                    'nombre_tomo': row[2],
-                    'nombre_seccion': row[3],
-                    'trimestre_categoria': row[4],
-                    'nombre_fraccion': row[5],
-                    'año': row[6]
+                    'año': row[2],
+                    'trimestre_categoria': row[3],
+                    'ruta': row[4],
+                    'nombre_tomo': row[5],
+                    'nombre_seccion': row[6],
+                    'nombre_fraccion': row[7]
                 }
                 respuesta.append(documento)
             return respuesta
@@ -3711,7 +3711,6 @@ def listar_documentos():
         cursor.close()
         connection.close()
 
-# Endpoint para buscar un documento por id
 @app.get("/documento-conac/{id_documento}", status_code=status.HTTP_200_OK, summary="Endpoint para buscar un documento en la bd", tags=['Documentos-Conac'])
 def detalle_documento(id_documento: int):
     connection = mysql.connector.connect(**db_config)
@@ -3724,11 +3723,12 @@ def detalle_documento(id_documento: int):
             documento = {
                 'id_documento': datos[0],
                 'archivo': datos[1],
-                'nombre_tomo': datos[2],
-                'nombre_seccion': datos[3],
-                'trimestre_categoria': datos[4],
-                'nombre_fraccion': datos[5],
-                'año': datos[6]
+                'año': datos[2],
+                'trimestre_categoria': datos[3],
+                'ruta': datos[4],
+                'nombre_tomo': datos[5],
+                'nombre_seccion': datos[6],
+                'nombre_fraccion': datos[7]
             }
             return documento
         else:
@@ -3737,7 +3737,6 @@ def detalle_documento(id_documento: int):
         cursor.close()
         connection.close()
 
-# Endpoint para buscar documentos por nombre de fracción
 @app.get("/documento-conac/fraccion/{nombre_fraccion}", status_code=status.HTTP_200_OK, summary="Buscar documentos por nombre de fracción", tags=['Documentos-Conac'])
 def buscar_documentos_por_fraccion(nombre_fraccion: str):
     connection = mysql.connector.connect(**db_config)
@@ -3752,11 +3751,12 @@ def buscar_documentos_por_fraccion(nombre_fraccion: str):
                 documento = {
                     'id_documento': row[0],
                     'archivo': row[1],
-                    'nombre_tomo': row[2],
-                    'nombre_seccion': row[3],
-                    'trimestre_categoria': row[4],
-                    'nombre_fraccion': row[5],
-                    'año': row[6]
+                    'año': row[2],
+                    'trimestre_categoria': row[3],
+                    'ruta': row[4],
+                    'nombre_tomo': row[5],
+                    'nombre_seccion': row[6],
+                    'nombre_fraccion': row[7]
                 }
                 respuesta.append(documento)
             return respuesta
@@ -3768,18 +3768,17 @@ def buscar_documentos_por_fraccion(nombre_fraccion: str):
 
 @app.post("/documento-conac/crear", status_code=status.HTTP_200_OK, summary="Endpoint para crear un documento", tags=['Documentos-Conac'])
 async def crear_documento(
-    id_tomo: int = Form(...),
-    id_seccion: int = Form(...),
+    nombre_tomo: str = Form(...),
+    nombre_seccion: str = Form(...),
     trimestre_categoria: str = Form(...),
-    id_fraccion: int = Form(...),
+    nombre_fraccion: str = Form(...),
     año: str = Form(...),
     file: UploadFile = File(...)):
-    
     connection = mysql.connector.connect(**db_config)
     cursor = connection.cursor()
     try:
         # Crear la ruta del archivo con la estructura especificada
-        directory = f"static/conac/{id_fraccion}/{año}"
+        directory = f"static/conac/{nombre_fraccion}/{año}"
         os.makedirs(directory, exist_ok=True)
         file_location = os.path.join(directory, file.filename)
 
@@ -3789,22 +3788,22 @@ async def crear_documento(
 
         # Insertar documento en la base de datos
         query = """
-        INSERT INTO documento_conac (archivo, id_tomo, id_seccion, trimestre_categoria, id_fraccion, año, ruta)
+        INSERT INTO documento_conac (archivo, año, trimestre_categoria, ruta, nombre_tomo, nombre_seccion, nombre_fraccion)
         VALUES (%s, %s, %s, %s, %s, %s, %s)
         """
-        documento_data = (file.filename, id_tomo, id_seccion, trimestre_categoria, id_fraccion, año, file_location)
+        documento_data = (file.filename, año, trimestre_categoria, file_location, nombre_tomo, nombre_seccion, nombre_fraccion)
         cursor.execute(query, documento_data)
         connection.commit()
 
         return {
             'id_documento': cursor.lastrowid,
             'archivo': file.filename,
-            'id_tomo': id_tomo,
-            'id_seccion': id_seccion,
-            'trimestre_categoria': trimestre_categoria,
-            'id_fraccion': id_fraccion,
             'año': año,
-            'ruta': file_location
+            'trimestre_categoria': trimestre_categoria,
+            'ruta': file_location,
+            'nombre_tomo': nombre_tomo,
+            'nombre_seccion': nombre_seccion,
+            'nombre_fraccion': nombre_fraccion
         }
     except mysql.connector.Error as err:
         print(f"Error al insertar documento en la base de datos: {err}")
@@ -3813,7 +3812,6 @@ async def crear_documento(
         cursor.close()
         connection.close()
 
-# Endpoint para borrar un documento por id
 @app.delete("/documento-conac/borrar/{id_documento}", status_code=status.HTTP_200_OK, summary="Endpoint para borrar un documento", tags=['Documentos-Conac'])
 def borrar_documento(id_documento: int):
     connection = mysql.connector.connect(**db_config)
