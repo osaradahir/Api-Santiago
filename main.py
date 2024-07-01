@@ -2709,6 +2709,7 @@ async def crear_documento(
         cursor.close()
         connection.close()
 
+#Endpoint para borrar un documento
 @app.delete("/documento/borrar/{id_documento}", status_code=status.HTTP_200_OK, summary="Endpoint para borrar un documento", tags=['Documentos'])
 def borrar_documento(id_documento: int):
     connection = mysql.connector.connect(**db_config)
@@ -2718,41 +2719,45 @@ def borrar_documento(id_documento: int):
         cursor.execute("SELECT documento, año, id_fraccion FROM documentos WHERE id_documento = %s", (id_documento,))
         documento_data = cursor.fetchone()
 
-        if not documento_data:
-            raise HTTPException(status_code=404, detail="Documento no encontrado")
-        
-        documento, año, id_fraccion = documento_data
+        if documento_data:
+            documento, año, id_fraccion = documento_data
 
-        # Obtener fraccion y num_articulo desde la base de datos
-        cursor.execute("""
-            SELECT f.fraccion, a.num_articulo 
-            FROM fracciones f
-            JOIN articulos a ON f.num_articulo = a.num_articulo
-            WHERE f.id_fraccion = %s
-        """, (id_fraccion,))
-        fraccion_articulo = cursor.fetchone()
-        
-        if not fraccion_articulo:
-            raise HTTPException(status_code=404, detail="Fracción o artículo no encontrado")
-        
-        fraccion, articulo = fraccion_articulo
+            # Obtener fraccion y num_articulo desde la base de datos
+            cursor.execute("""
+                SELECT f.fraccion, a.num_articulo 
+                FROM fracciones f
+                JOIN articulos a ON f.num_articulo = a.num_articulo
+                WHERE f.id_fraccion = %s
+            """, (id_fraccion,))
+            fraccion_articulo = cursor.fetchone()
 
-        # Construir la ruta completa del archivo
-        file_location = os.path.join(f"static/documents/transparencia/{str(articulo)}/{fraccion}/{str(año)}/{documento}")
+            if fraccion_articulo:
+                fraccion, articulo = fraccion_articulo
 
-        # Eliminar el archivo localmente
-        if os.path.exists(file_location):
-            os.remove(file_location)
-        else:
-            raise HTTPException(status_code=404, detail="Archivo no encontrado en el sistema de archivos")
+                # Construir la ruta completa del archivo
+                file_location = os.path.join(f"static/documents/transparencia/{str(articulo)}/{fraccion}/{str(año)}/{documento}")
 
-        # Eliminar el documento de la base de datos
+                # Eliminar el archivo localmente
+                if os.path.exists(file_location):
+                    os.remove(file_location)
+                else:
+                    print(f"Advertencia: Archivo no encontrado en el sistema de archivos: {file_location}")
+
+                # Eliminar el documento de la base de datos
+                cursor.execute("DELETE FROM documentos WHERE id_documento = %s", (id_documento,))
+                connection.commit()
+
+                return JSONResponse(content={"message": "Documento borrado correctamente", "id_documento": id_documento})
+            else:
+                print(f"Advertencia: Fracción o artículo no encontrado para el documento con ID: {id_documento}")
+
+        # Aunque no se encontró el documento, se intenta borrar el registro de la base de datos
         cursor.execute("DELETE FROM documentos WHERE id_documento = %s", (id_documento,))
         connection.commit()
 
-        return JSONResponse(content={"message": "Documento borrado correctamente", "id_documento": id_documento})
+        return JSONResponse(content={"message": "Documento no encontrado, pero se eliminó el registro de la base de datos", "id_documento": id_documento})
+        
     except mysql.connector.Error as err:
-        # Manejar errores de la base de datos
         print(f"Error al borrar el documento en la base de datos: {err}")
         raise HTTPException(status_code=500, detail="Error interno al borrar documento")
     finally:
@@ -3737,35 +3742,6 @@ def detalle_documento(id_documento: int):
         cursor.close()
         connection.close()
 
-@app.get("/documento-conac/fraccion/{nombre_fraccion}", status_code=status.HTTP_200_OK, summary="Buscar documentos por nombre de fracción", tags=['Documentos-Conac'])
-def buscar_documentos_por_fraccion(nombre_fraccion: str):
-    connection = mysql.connector.connect(**db_config)
-    cursor = connection.cursor()
-    try:
-        query = "SELECT * FROM documento_conac WHERE nombre_fraccion = %s"
-        cursor.execute(query, (nombre_fraccion,))
-        datos = cursor.fetchall()
-        if datos:
-            respuesta = []
-            for row in datos:
-                documento = {
-                    'id_documento': row[0],
-                    'archivo': row[1],
-                    'año': row[2],
-                    'trimestre_categoria': row[3],
-                    'ruta': row[4],
-                    'nombre_tomo': row[5],
-                    'nombre_seccion': row[6],
-                    'nombre_fraccion': row[7]
-                }
-                respuesta.append(documento)
-            return respuesta
-        else:
-            raise HTTPException(status_code=404, detail="No existen documentos con esa fracción en la Base de datos")
-    finally:
-        cursor.close()
-        connection.close()
-
 @app.post("/documento-conac/crear", status_code=status.HTTP_200_OK, summary="Endpoint para crear un documento", tags=['Documentos-Conac'])
 async def crear_documento(
     nombre_tomo: str = Form(...),
@@ -3774,15 +3750,6 @@ async def crear_documento(
     nombre_fraccion: str = Form(...),
     año: str = Form(...),
     file: UploadFile = File(...)):
-    
-    print(f"Datos recibidos del frontend:\n"
-          f"nombre_tomo: {nombre_tomo}\n"
-          f"nombre_seccion: {nombre_seccion}\n"
-          f"trimestre_categoria: {trimestre_categoria}\n"
-          f"nombre_fraccion: {nombre_fraccion}\n"
-          f"año: {año}\n"
-          f"file: {file.filename}")
-    
     connection = mysql.connector.connect(**db_config)
     cursor = connection.cursor()
     try:
@@ -3829,25 +3796,31 @@ def borrar_documento(id_documento: int):
         # Verificar si el documento existe y obtener su ruta
         cursor.execute("SELECT archivo, año, nombre_fraccion FROM documento_conac WHERE id_documento = %s", (id_documento,))
         documento_data = cursor.fetchone()
-        if not documento_data:
-            raise HTTPException(status_code=404, detail="Documento no encontrado")
         
-        archivo, año, nombre_fraccion = documento_data
+        if documento_data:
+            archivo, año, nombre_fraccion = documento_data
 
-        # Construir la ruta completa del archivo
-        file_location = f"static/conac/{nombre_fraccion}/{año}/{archivo}"
+            # Construir la ruta completa del archivo
+            file_location = f"static/conac/{nombre_fraccion}/{año}/{archivo}"
 
-        # Eliminar el archivo localmente
-        if os.path.exists(file_location):
-            os.remove(file_location)
+            # Eliminar el archivo localmente
+            if os.path.exists(file_location):
+                os.remove(file_location)
+            else:
+                print(f"Advertencia: Archivo no encontrado en el sistema de archivos: {file_location}")
+
+            # Eliminar el documento de la base de datos
+            cursor.execute("DELETE FROM documento_conac WHERE id_documento = %s", (id_documento,))
+            connection.commit()
+
+            return JSONResponse(content={"message": "Documento borrado correctamente", "id_documento": id_documento})
         else:
-            raise HTTPException(status_code=404, detail="Archivo no encontrado en el sistema de archivos")
+            # Aunque no se encontró el documento, se intenta borrar el registro de la base de datos
+            cursor.execute("DELETE FROM documento_conac WHERE id_documento = %s", (id_documento,))
+            connection.commit()
 
-        # Eliminar el documento de la base de datos
-        cursor.execute("DELETE FROM documento_conac WHERE id_documento = %s", (id_documento,))
-        connection.commit()
-
-        return JSONResponse(content={"message": "Documento borrado correctamente", "id_documento": id_documento})
+            return JSONResponse(content={"message": "Documento no encontrado, pero se eliminó el registro de la base de datos", "id_documento": id_documento})
+        
     except mysql.connector.Error as err:
         print(f"Error al borrar documento en la base de datos: {err}")
         raise HTTPException(status_code=500, detail="Error interno al borrar documento")
