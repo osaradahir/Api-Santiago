@@ -3793,6 +3793,7 @@ async def crear_documento(
         """
         documento_data = (file.filename, año, trimestre_categoria, file_location, nombre_tomo, nombre_seccion, nombre_fraccion)
         cursor.execute(query, documento_data)
+        print(documento_data)
         connection.commit()
 
         return {
