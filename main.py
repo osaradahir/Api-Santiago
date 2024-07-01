@@ -1971,7 +1971,7 @@ def obtener_respuestas_abiertas(id_encuesta: int, id_pregunta: int):
     connection = mysql.connector.connect(**db_config)
     cursor = connection.cursor(dictionary=True)
     try:
-        query_respuestas_abiertas = "SELECT respuesta FROM respuestas_abiertas WHERE id_encuesta = %s AND id_pregunta = %s"
+        query_respuestas_abiertas = "SELECT respuesta FROM respuestas_abierta WHERE id_encuesta = %s AND id_pregunta = %s"
         cursor.execute(query_respuestas_abiertas, (id_encuesta, id_pregunta))
         respuestas_abiertas = cursor.fetchall()
         return respuestas_abiertas
@@ -2113,7 +2113,7 @@ def obtener_respuestas_cerradas(id_encuesta: int, id_pregunta: int, id_opcion: i
     connection = mysql.connector.connect(**db_config)
     cursor = connection.cursor(dictionary=True)
     try:
-        query_respuestas_cerradas = "SELECT COUNT(*) AS total_respuestas FROM respuestas_cerradas WHERE id_encuesta = %s AND id_pregunta = %s AND id_opcion = %s"
+        query_respuestas_cerradas = "SELECT COUNT(*) AS total_respuestas FROM respuestas_cerrada WHERE id_encuesta = %s AND id_pregunta = %s AND id_opcion = %s"
         cursor.execute(query_respuestas_cerradas, (id_encuesta, id_pregunta, id_opcion))
         total_respuestas = cursor.fetchone()
         return total_respuestas
