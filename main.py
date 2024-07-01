@@ -3774,6 +3774,15 @@ async def crear_documento(
     nombre_fraccion: str = Form(...),
     año: str = Form(...),
     file: UploadFile = File(...)):
+    
+    print(f"Datos recibidos del frontend:\n"
+          f"nombre_tomo: {nombre_tomo}\n"
+          f"nombre_seccion: {nombre_seccion}\n"
+          f"trimestre_categoria: {trimestre_categoria}\n"
+          f"nombre_fraccion: {nombre_fraccion}\n"
+          f"año: {año}\n"
+          f"file: {file.filename}")
+    
     connection = mysql.connector.connect(**db_config)
     cursor = connection.cursor()
     try:
@@ -3793,7 +3802,6 @@ async def crear_documento(
         """
         documento_data = (file.filename, año, trimestre_categoria, file_location, nombre_tomo, nombre_seccion, nombre_fraccion)
         cursor.execute(query, documento_data)
-        print(documento_data)
         connection.commit()
 
         return {
