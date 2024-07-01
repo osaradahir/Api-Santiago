@@ -2141,12 +2141,6 @@ def crear_respuesta_cerrada(respuesta:Respuesta_cerrada):
         if cursor.fetchone() is None:
             raise HTTPException(status_code=404, detail="La pregunta no existe")
         
-        # Verificar si la pregunta es abierta o cerrada
-        query_check_pregunta_1 = "SELECT 1 FROM preguntas WHERE id_pregunta = %s AND pregunta_abierta = %s"
-        cursor.execute(query_check_pregunta_1, (respuesta.id_pregunta,1))
-        if cursor.fetchone() is not None:
-            raise HTTPException(status_code=404, detail="La pregunta es abierta, como se supone que va a hacer eso??")
-        
         # Verificar si el id_opcion existe en la tabla opcion
         query_check_pregunta_1 = "SELECT 1 FROM opcion WHERE id_opcion = %s"
         cursor.execute(query_check_pregunta_1, (respuesta.id_opcion,))
