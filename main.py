@@ -1966,6 +1966,22 @@ def listar_respuestas_abiertas():
         cursor.close()
         connection.close()
 
+@app.get("/respuesta_abierta/{id_encuesta}/{id_pregunta}", status_code=200, summary="Endpoint para obtener respuestas abiertas de una pregunta", tags=['Respuestas_abiertas'])
+def obtener_respuestas_abiertas(id_encuesta: int, id_pregunta: int):
+    connection = mysql.connector.connect(**db_config)
+    cursor = connection.cursor(dictionary=True)
+    try:
+        query_respuestas_abiertas = "SELECT respuesta FROM respuestas_abiertas WHERE id_encuesta = %s AND id_pregunta = %s"
+        cursor.execute(query_respuestas_abiertas, (id_encuesta, id_pregunta))
+        respuestas_abiertas = cursor.fetchall()
+        return respuestas_abiertas
+    except mysql.connector.Error as err:
+        print(f"Error al obtener respuestas abiertas: {err}")
+        raise HTTPException(status_code=500, detail="Error interno del servidor")
+    finally:
+        cursor.close()
+        connection.close()
+
 @app.get("/respuesta_abierta/{id_respuesta_abierta}",status_code=status.HTTP_200_OK, summary="Endpoint para buscar una respuesta abierta en la bd", tags=['Respuestas_abiertas'])
 def detalle_respuesta_abierta(id_respuesta_abierta:int):
     connection = mysql.connector.connect(**db_config)
@@ -2008,12 +2024,6 @@ def crear_respuesta_abierta(respuesta:Respuesta_abierta):
         cursor.execute(query_check_pregunta_1, (respuesta.id_pregunta,))
         if cursor.fetchone() is None:
             raise HTTPException(status_code=404, detail="La pregunta no existe")
-        
-        # Verificar si el id_pregunta existe en la tabla encuestas
-        query_check_pregunta_1 = "SELECT 1 FROM preguntas WHERE id_pregunta = %s AND pregunta_abierta = %s"
-        cursor.execute(query_check_pregunta_1, (respuesta.id_pregunta,0))
-        if cursor.fetchone() is not None:
-            raise HTTPException(status_code=404, detail="La pregunta es cerrada, no deberias poner opciones ahi")
 
         # Insertar nuevo evento en la base de datos
         query = "INSERT INTO respuesta_abierta (id_pregunta, id_encuesta, respuesta) VALUES (%s,%s,%s)"
@@ -2094,6 +2104,22 @@ def listar_respuestas_cerradas():
             return respuesta
         else:
             raise HTTPException(status_code=404, detail="No hay respuestas cerradas en la Base de datos")
+    finally:
+        cursor.close()
+        connection.close()
+
+@app.get("/respuesta_cerrada/{id_encuesta}/{id_pregunta}/{id_opcion}", status_code=200, summary="Endpoint para obtener respuestas cerradas de una pregunta y opción", tags=['Respuestas_cerradas'])
+def obtener_respuestas_cerradas(id_encuesta: int, id_pregunta: int, id_opcion: int):
+    connection = mysql.connector.connect(**db_config)
+    cursor = connection.cursor(dictionary=True)
+    try:
+        query_respuestas_cerradas = "SELECT COUNT(*) AS total_respuestas FROM respuestas_cerradas WHERE id_encuesta = %s AND id_pregunta = %s AND id_opcion = %s"
+        cursor.execute(query_respuestas_cerradas, (id_encuesta, id_pregunta, id_opcion))
+        total_respuestas = cursor.fetchone()
+        return total_respuestas
+    except mysql.connector.Error as err:
+        print(f"Error al obtener respuestas cerradas: {err}")
+        raise HTTPException(status_code=500, detail="Error interno del servidor")
     finally:
         cursor.close()
         connection.close()
