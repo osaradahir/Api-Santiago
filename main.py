@@ -1313,6 +1313,7 @@ def detalle_evento(id_evento:int):
     finally:
         cursor.close()
         connection.close()
+
 @app.post("/evento/crear", status_code=status.HTTP_200_OK, summary="Endpoint para crear un evento", tags=['Eventos'])
 def crear_evento(
     titulo: str = Form(...),
@@ -3898,7 +3899,8 @@ def listar_sitios():
                     'direccion': row[2],
                     'descripcion': row[3],
                     'imagen': row[4],
-                    'ruta': row[5]
+                    'ruta': row[5],
+                    'categoria': row[6]
                 }
                 respuesta.append(dato)
             return respuesta
