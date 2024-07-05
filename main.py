@@ -847,7 +847,8 @@ def editar_ubicacion(ubicaciones:Ubicaciones, id_ubicacion:int):
         cursor.close()
         connection.close()
 
-@app.get("/ubicacion/{lugar}", status_code=status.HTTP_200_OK, summary="Endpoint para buscar una ubicación por nombre", tags=['Mapa-Ubicaciones'])
+
+@app.get("/ubicacion/{lugar}", response_model=list[Ubicacion], status_code=status.HTTP_200_OK, summary="Endpoint para buscar una ubicación por nombre", tags=['Mapa-Ubicaciones'])
 def buscar_ubicacion_por_nombre(lugar: str):
     connection = mysql.connector.connect(**db_config)
     cursor = connection.cursor()
@@ -868,11 +869,10 @@ def buscar_ubicacion_por_nombre(lugar: str):
 
             return respuesta
         else:
-            raise HTTPException(status_code=404, detail="No existe esa ubicación en la base de datos")
+            raise HTTPException(status_code=404, detail=f"No existe la ubicación '{lugar}' en la base de datos")
     finally:
         cursor.close()
         connection.close()
-
 
 @app.delete("/ubicacion/borrar/{id_ubicacion}", status_code=status.HTTP_200_OK, summary="Endpoint para borrar una ubicacion existente en el mapa", tags=['Mapa-Ubicaciones'])
 def borrar_ubicacion(id_ubicacion: int):
