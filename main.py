@@ -847,13 +847,13 @@ def editar_ubicacion(ubicaciones:Ubicaciones, id_ubicacion:int):
         cursor.close()
         connection.close()
 
-@app.get("/ubicacion/{nombre_sitio}", status_code=status.HTTP_200_OK, summary="Endpoint para buscar una ubicación por nombre", tags=['Mapa-Ubicaciones'])
-def buscar_ubicacion_por_nombre(nombre_sitio: str):
+@app.get("/ubicacion/{lugar}", status_code=status.HTTP_200_OK, summary="Endpoint para buscar una ubicación por nombre", tags=['Mapa-Ubicaciones'])
+def buscar_ubicacion_por_nombre(lugar: str):
     connection = mysql.connector.connect(**db_config)
     cursor = connection.cursor()
     try:
         query = "SELECT * FROM ubicaciones WHERE lugar = %s;"
-        cursor.execute(query, (nombre_sitio,))
+        cursor.execute(query, (lugar,))
         datos = cursor.fetchall()
         if datos:
             respuesta = []
