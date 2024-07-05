@@ -174,6 +174,10 @@ class Seccion(BaseModel):
 class FraccionConac(BaseModel):
     nombre_fraccion: str
 
+class Explora (BaseModel):
+    nombre_lugar: str
+    direccion: str
+    descripcion: str
 
 app.mount("/static", StaticFiles(directory="static"),name="static")
 
@@ -482,8 +486,8 @@ async def subir_logo(file: UploadFile = File(...)):
         with Image.open(file_location) as img:
             if img.size < (200, 200):
                 raise HTTPException(status_code=400, detail="El logo tiene que ser mayor a 200x200")
-            elif img.size > (1500, 1500):
-                raise HTTPException(status_code=400, detail="El logo tiene que ser menor a 1500x1500")
+            elif img.size > (9000, 9000):
+                raise HTTPException(status_code=400, detail="El logo tiene que ser menor a 9000x9000")
     except Exception as e:
         raise HTTPException(status_code=400, detail="Invalid image file")
 
@@ -644,8 +648,8 @@ async def crear_aviso(
         with Image.open(file_location) as img:
             if img.size < (200, 200):
                 raise HTTPException(status_code=400, detail="La imagen tiene que ser mayor a 200x200")
-            elif img.size > (1500, 1500):
-                raise HTTPException(status_code=400, detail="La imagen tiene que ser menor a 1500x1500")
+            elif img.size > (9000, 9000):
+                raise HTTPException(status_code=400, detail="La imagen tiene que ser menor a 9000x9000")
     except Exception as e:
         raise HTTPException(status_code=400, detail="Invalid image file")
 
@@ -690,8 +694,8 @@ async def editar_aviso(
             with Image.open(file_location) as img:
                 if img.size < (200, 200):
                     raise HTTPException(status_code=400, detail="La imagen tiene que ser mayor a 200x200")
-                elif img.size > (1500, 1500):
-                    raise HTTPException(status_code=400, detail="La imagen tiene que ser menor a 1500x1500")
+                elif img.size > (9000, 9000):
+                    raise HTTPException(status_code=400, detail="La imagen tiene que ser menor a 9000x9000")
         except Exception as e:
             raise HTTPException(status_code=400, detail="Invalid image file")
 
@@ -960,7 +964,6 @@ def crear_contacto(contacto: Contacto):
         cursor.close()
         connection.close()
 
-from fastapi.responses import JSONResponse
 
 @app.put("/contacto/editar/{id_contacto}", status_code=status.HTTP_200_OK, summary="Endpoint para editar un contacto", tags=['Contactos'])
 async def editar_contacto(
@@ -1117,11 +1120,12 @@ async def crear_noticia(
 
     # Abrir la imagen y comprobar el tamaño
     try:
+        
         with Image.open(file_location) as img:
             if img.size < (200, 200):
                 raise HTTPException(status_code=400, detail="La imagen tiene que ser mayor a 200x200")
-            elif img.size > (1500, 1500):
-                raise HTTPException(status_code=400, detail="La imagen tiene que ser menor a 1500x1500")
+            elif img.size > (9000, 9000):
+                raise HTTPException(status_code=400, detail="La imagen tiene que ser menor a 9000x9000")
     except Exception as e:
         raise HTTPException(status_code=400, detail="Invalid image file")
 
@@ -1164,8 +1168,8 @@ async def editar_noticia(
             with Image.open(file_location) as img:
                 if img.size < (200, 200):
                     raise HTTPException(status_code=400, detail="La imagen tiene que ser mayor a 200x200")
-                elif img.size > (1500, 1500):
-                    raise HTTPException(status_code=400, detail="La imagen tiene que ser menor a 1500x1500")
+                elif img.size > (9000, 9000):
+                    raise HTTPException(status_code=400, detail="La imagen tiene que ser menor a 9000x9000")
         except Exception as e:
             raise HTTPException(status_code=400, detail="Invalid image file")
 
@@ -1298,8 +1302,8 @@ def crear_evento(
         with Image.open(file_location) as img:
             if img.size < (200, 200):
                 raise HTTPException(status_code=400, detail="La imagen tiene que ser mayor a 200x200")
-            elif img.size > (1500, 1500):
-                raise HTTPException(status_code=400, detail="La imagen tiene que ser menor a 1500x1500")
+            elif img.size > (9000, 9000):
+                raise HTTPException(status_code=400, detail="La imagen tiene que ser menor a 9000x9000")
     except Exception as e:
         raise HTTPException(status_code=400, detail="Invalid image file")
     
@@ -1342,8 +1346,8 @@ def editar_evento(
             with Image.open(file_location) as img:
                 if img.size < (200, 200):
                     raise HTTPException(status_code=400, detail="La imagen tiene que ser mayor a 200x200")
-                elif img.size > (1500, 1500):
-                    raise HTTPException(status_code=400, detail="La imagen tiene que ser menor a 1500x1500")
+                elif img.size > (9000, 9000):
+                    raise HTTPException(status_code=400, detail="La imagen tiene que ser menor a 9000x9000")
         except Exception as e:
             raise HTTPException(status_code=400, detail="Invalid image file")
 
@@ -2976,8 +2980,8 @@ async def crear_funcionario(
         with Image.open(file_location) as img:
             if img.size < (200, 200):
                 raise HTTPException(status_code=400, detail="La imagen debe tener al menos 200x200 píxeles")
-            elif img.size > (1500, 1500):
-                raise HTTPException(status_code=400, detail="La imagen debe tener como máximo 1500x1500 píxeles")
+            elif img.size > (9000, 9000):
+                raise HTTPException(status_code=400, detail="La imagen debe tener como máximo 9000x9000 píxeles")
     except Exception as e:
         raise HTTPException(status_code=400, detail="Archivo de imagen inválido")
 
@@ -3023,8 +3027,8 @@ async def editar_funcionario(
             with Image.open(file_location) as img:
                 if img.size < (200, 200):
                     raise HTTPException(status_code=400, detail="La imagen tiene que ser mayor a 200x200")
-                elif img.size > (1500, 1500):
-                    raise HTTPException(status_code=400, detail="La imagen tiene que ser menor a 1500x1500")
+                elif img.size > (9000, 9000):
+                    raise HTTPException(status_code=400, detail="La imagen tiene que ser menor a 9000x9000")
         except Exception as e:
             raise HTTPException(status_code=400, detail="Archivo de imagen inválido")
 
@@ -3149,13 +3153,13 @@ async def crear_exPresidente(
         with Image.open(file_location) as img:
             if img.size < (200, 200):
                 raise HTTPException(status_code=400, detail="La imagen debe tener al menos 200x200 píxeles")
-            elif img.size > (1500, 1500):
-                raise HTTPException(status_code=400, detail="La imagen debe tener como máximo 1500x1500 píxeles")
+            elif img.size > (9000, 9000):
+                raise HTTPException(status_code=400, detail="La imagen debe tener como máximo 9000x9000 píxeles")
     except Exception as e:
         raise HTTPException(status_code=400, detail="Archivo de imagen inválido")
 
     # Crear carpeta final si no existe
-    final_dir = "static/images/expresidentes"
+    final_dir = "static/images/expresidentes/"
     if not os.path.exists(final_dir):
         os.makedirs(final_dir, exist_ok=True)
 
@@ -3195,8 +3199,8 @@ async def editar_exPresidente(
             with Image.open(file_location) as img:
                 if img.size < (200, 200):
                     raise HTTPException(status_code=400, detail="La imagen tiene que ser mayor a 200x200")
-                elif img.size > (1500, 1500):
-                    raise HTTPException(status_code=400, detail="La imagen tiene que ser menor a 1500x1500")
+                elif img.size > (9000, 9000):
+                    raise HTTPException(status_code=400, detail="La imagen tiene que ser menor a 9000x9000")
         except Exception as e:
             raise HTTPException(status_code=400, detail="Archivo de imagen inválido")
 
@@ -3844,6 +3848,251 @@ def borrar_documento(id_documento: int):
     except mysql.connector.Error as err:
         print(f"Error al borrar documento en la base de datos: {err}")
         raise HTTPException(status_code=500, detail="Error interno al borrar documento")
+    finally:
+        cursor.close()
+        connection.close()
+
+@app.get("/explora", status_code=status.HTTP_200_OK, summary="Endpoint para listar todos los sitios existentes", tags=['Explora'])
+def listar_sitios():
+    connection = mysql.connector.connect(**db_config)
+    cursor = connection.cursor()
+    try:
+        cursor.execute("SELECT * FROM explora")
+        datos = cursor.fetchall()
+        if datos:
+            respuesta = []
+            for row in datos:
+                dato = {
+                    'id_explora': row[0],
+                    'nombre_sitio': row[1],
+                    'direccion': row[2],
+                    'descripcion': row[3],
+                    'imagen': row[4],
+                    'ruta': row[5]
+                }
+                respuesta.append(dato)
+            return respuesta
+        else:
+            raise HTTPException(status_code=404, detail="No hay sitios en la Base de datos")
+    finally:
+        cursor.close()
+        connection.close()
+
+@app.get("/explora/{id_explora}", status_code=status.HTTP_200_OK, summary="Endpoint para buscar un sitio en la bd", tags=['Explora'])
+def detalle_sitio(id_explora: int):
+    connection = mysql.connector.connect(**db_config)
+    cursor = connection.cursor()
+    try:
+        # Consulta para obtener el sitio de la tabla explora
+        query_explora = "SELECT * FROM explora WHERE id_explora = %s"
+        cursor.execute(query_explora, (id_explora,))
+        datos_explora = cursor.fetchone()
+
+        if datos_explora:
+            # Consulta para obtener la longitud y latitud de la tabla ubicaciones basada en el nombre del sitio
+            query_ubicaciones = "SELECT latitud, longitud  FROM ubicaciones WHERE lugar = %s"
+            cursor.execute(query_ubicaciones, (datos_explora[1],))
+            datos_ubicaciones = cursor.fetchone()
+
+            if datos_ubicaciones:
+                respuesta = {
+                    'id_explora': datos_explora[0],
+                    'nombre_sitio': datos_explora[1],
+                    'direccion': datos_explora[2],
+                    'descripcion': datos_explora[3],
+                    'imagen': datos_explora[4],
+                    'ruta': datos_explora[5],
+                    'longitud': datos_ubicaciones[0],
+                    'latitud': datos_ubicaciones[1]
+                }
+                return respuesta
+            else:
+                raise HTTPException(status_code=404, detail="No existe la ubicación para el sitio en la Base de datos")
+        else:
+            raise HTTPException(status_code=404, detail="No existe ese sitio en la Base de datos")
+    finally:
+        cursor.close()
+        connection.close()
+
+@app.post("/explora/crear", status_code=status.HTTP_201_CREATED, summary="Endpoint para crear un sitio en Explora", tags=['Explora'])
+async def crear_sitio(
+    nombre_sitio: str = Form(...),
+    direccion: str = Form(None),
+    descripcion: str = Form(...),
+    file: UploadFile = File(...)
+):
+    connection = mysql.connector.connect(**db_config)
+    cursor = connection.cursor()
+
+    try:
+         # Guardar temporalmente el archivo
+        file_location = f"static/temp/{file.filename}"
+        with open(file_location, "wb") as buffer:
+            shutil.copyfileobj(file.file, buffer)
+
+
+        # Validar el tamaño de la imagen
+        try:
+            with Image.open(file_location) as img:
+                if img.size < (200, 200):
+                    raise HTTPException(status_code=400, detail="La imagen debe tener al menos 200x200 píxeles")
+                elif img.size > (9000, 9000):
+                    raise HTTPException(status_code=400, detail="La imagen debe tener como máximo 9000x9000 píxeles")
+        except Exception as e:
+            raise HTTPException(status_code=400, detail="Archivo de imagen inválido")
+
+        # Mover el archivo al directorio final
+        final_location = f"static/images/explora/{file.filename}"
+        shutil.move(file_location, final_location)
+
+        # Si no se proporciona una dirección, buscarla usando el nombre del sitio
+        if not direccion:
+            query_ubicacion = "SELECT latitud, longitud FROM ubicaciones WHERE nombre_sitio = %s;"
+            cursor.execute(query_ubicacion, (nombre_sitio,))
+            datos = cursor.fetchone()
+            if datos:
+                latitud, longitud = datos
+                coordenadas = f"{latitud}, {longitud}"
+                location = geolocator.reverse(coordenadas)
+                if location:
+                    direccion = location.address
+                else:
+                    raise HTTPException(status_code=404, detail="No se pudo obtener la dirección a partir de las coordenadas")
+            else:
+                raise HTTPException(status_code=404, detail="No existe esa ubicación en la Base de datos")
+
+        # Insertar el nuevo sitio en la base de datos
+        query = "INSERT INTO explora (nombre_sitio, direccion, descripcion, imagen, ruta) VALUES (%s, %s, %s, %s, %s)"
+        sitio_data = (nombre_sitio, direccion, descripcion, file.filename, final_location)
+        cursor.execute(query, sitio_data)
+        connection.commit()
+
+        return JSONResponse(content={
+            'message': 'Sitio creado exitosamente',
+            'data': {
+                'nombre_sitio': nombre_sitio,
+                'direccion': direccion,
+                'descripcion': descripcion,
+                'imagen': file.filename,
+                'ruta': final_location
+            }
+        })
+
+    except mysql.connector.Error as err:
+        print(f"Error al insertar sitio en la base de datos: {err}")
+        raise HTTPException(status_code=500, detail="Error interno al crear sitio")
+    except Exception as e:
+        print(f"Error inesperado: {e}")
+        raise HTTPException(status_code=500, detail="Error inesperado al procesar la solicitud")
+    finally:
+        cursor.close()
+        connection.close()
+
+@app.put("/explora/actualizar/{id_explora}", status_code=status.HTTP_200_OK, summary="Endpoint para actualizar un sitio en Explora", tags=['Explora'])
+async def actualizar_sitio(
+    id_explora: int,
+    nombre_sitio: str = Form(...),
+    descripcion: str = Form(...),
+    file: UploadFile = File(None)
+):
+    connection = mysql.connector.connect(**db_config)
+    cursor = connection.cursor()
+
+    try:
+        final_location = None
+        if file:
+            # Guardar temporalmente el archivo
+            file_location = f"static/temp/{file.filename}"
+            with open(file_location, "wb") as buffer:
+                shutil.copyfileobj(file.file, buffer)
+
+            # Validar el tamaño de la imagen
+            try:
+                with Image.open(file_location) as img:
+                    if img.size < (200, 200):
+                        raise HTTPException(status_code=400, detail="La imagen debe tener al menos 200x200 píxeles")
+                    elif img.size > (9000, 9000):
+                        raise HTTPException(status_code=400, detail="La imagen debe tener como máximo 9000x9000 píxeles")
+            except Exception as e:
+                raise HTTPException(status_code=400, detail="Archivo de imagen inválido")
+
+            # Mover el archivo al directorio final
+            final_location = f"static/images/explora/{file.filename}"
+            shutil.move(file_location, final_location)
+
+        # Obtener la dirección actual del sitio
+        query_direccion = "SELECT direccion FROM explora WHERE id_explora = %s"
+        cursor.execute(query_direccion, (id_explora,))
+        direccion_actual = cursor.fetchone()
+        if not direccion_actual:
+            raise HTTPException(status_code=404, detail="Sitio no encontrado")
+
+        # Actualizar el sitio en la base de datos
+        if final_location:
+            query = "UPDATE explora SET nombre_sitio = %s, descripcion = %s, imagen = %s, ruta = %s WHERE id_explora = %s"
+            sitio_data = (nombre_sitio, descripcion, file.filename, final_location, id_explora)
+        else:
+            query = "UPDATE explora SET nombre_sitio = %s, descripcion = %s WHERE id_explora = %s"
+            sitio_data = (nombre_sitio, descripcion, id_explora)
+
+        cursor.execute(query, sitio_data)
+        connection.commit()
+
+        return JSONResponse(content={
+            'message': 'Sitio actualizado exitosamente',
+            'data': {
+                'nombre_sitio': nombre_sitio,
+                'direccion': direccion_actual[0],  # Mostrar la dirección actual
+                'descripcion': descripcion,
+                'imagen': file.filename if final_location else None,
+                'ruta': final_location
+            }
+        })
+
+    except mysql.connector.Error as err:
+        print(f"Error al actualizar sitio en la base de datos: {err}")
+        raise HTTPException(status_code=500, detail="Error interno al actualizar sitio")
+    except Exception as e:
+        print(f"Error inesperado: {e}")
+        raise HTTPException(status_code=500, detail="Error inesperado al procesar la solicitud")
+    finally:
+        cursor.close()
+        connection.close()
+
+@app.delete("/explora/borrar/{id_explora}", status_code=status.HTTP_200_OK, summary="Endpoint para borrar un sitio en Explora", tags=['Explora'])
+async def borrar_sitio(id_explora: int):
+    connection = mysql.connector.connect(**db_config)
+    cursor = connection.cursor()
+
+    try:
+        # Obtener la información del sitio a borrar para eliminar la imagen del sistema de archivos
+        query_select = "SELECT imagen, ruta FROM explora WHERE id_explora = %s"
+        cursor.execute(query_select, (id_explora,))
+        sitio = cursor.fetchone()
+        if not sitio:
+            raise HTTPException(status_code=404, detail="Sitio no encontrado")
+
+        imagen, ruta = sitio
+
+        # Eliminar el sitio de la base de datos
+        query_delete = "DELETE FROM explora WHERE id_explora = %s"
+        cursor.execute(query_delete, (id_explora,))
+        connection.commit()
+
+        # Eliminar la imagen del sistema de archivos
+        if ruta:
+            os.remove(ruta)
+
+        return JSONResponse(content={
+            'message': 'Sitio borrado exitosamente'
+        })
+
+    except mysql.connector.Error as err:
+        print(f"Error al borrar sitio en la base de datos: {err}")
+        raise HTTPException(status_code=500, detail="Error interno al borrar sitio")
+    except Exception as e:
+        print(f"Error inesperado: {e}")
+        raise HTTPException(status_code=500, detail="Error inesperado al procesar la solicitud")
     finally:
         cursor.close()
         connection.close()
