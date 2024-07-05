@@ -802,7 +802,7 @@ def detalle_ubicacion(id_ubicacion:int):
         connection.close()
 
 
-@app.get("/ubicacion/{lugar}",status_code=status.HTTP_200_OK, summary="Endpoint para buscar una ubicacion en la bd", tags=['Mapa-Ubicaciones'])
+@app.get("/ubicacion-buscar/{lugar}",status_code=status.HTTP_200_OK, summary="Endpoint para buscar una ubicacion en la bd", tags=['Mapa-Ubicaciones'])
 def detalle_ubicacion(lugar:str):
     connection = mysql.connector.connect(**db_config)
     cursor = connection.cursor()
