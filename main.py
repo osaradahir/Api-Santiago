@@ -3947,7 +3947,7 @@ async def crear_sitio(
 
         # Si no se proporciona una dirección, buscarla usando el nombre del sitio
         if not direccion:
-            query_ubicacion = "SELECT latitud, longitud FROM ubicaciones WHERE nombre_sitio = %s;"
+            query_ubicacion = "SELECT latitud, longitud FROM ubicaciones WHERE lugar = %s;"
             cursor.execute(query_ubicacion, (nombre_sitio,))
             datos = cursor.fetchone()
             if datos:
