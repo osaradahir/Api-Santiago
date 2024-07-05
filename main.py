@@ -3951,7 +3951,8 @@ async def crear_sitio(
     nombre_sitio: str = Form(...),
     direccion: str = Form(None),
     descripcion: str = Form(...),
-    file: UploadFile = File(...)
+    file: UploadFile = File(...),
+    categoria: str = Form(...),
 ):
     connection = mysql.connector.connect(**db_config)
     cursor = connection.cursor()
@@ -3994,8 +3995,8 @@ async def crear_sitio(
                 raise HTTPException(status_code=404, detail="No existe esa ubicación en la Base de datos")
 
         # Insertar el nuevo sitio en la base de datos
-        query = "INSERT INTO explora (nombre_sitio, direccion, descripcion, imagen, ruta) VALUES (%s, %s, %s, %s, %s)"
-        sitio_data = (nombre_sitio, direccion, descripcion, file.filename, final_location)
+        query = "INSERT INTO explora (nombre_sitio, direccion, descripcion, imagen, ruta, categoria) VALUES (%s, %s, %s, %s, %s, %s)"
+        sitio_data = (nombre_sitio, direccion, descripcion, file.filename, final_location, categoria)
         cursor.execute(query, sitio_data)
         connection.commit()
 
@@ -4006,7 +4007,8 @@ async def crear_sitio(
                 'direccion': direccion,
                 'descripcion': descripcion,
                 'imagen': file.filename,
-                'ruta': final_location
+                'ruta': final_location,
+                'categoria': categoria
             }
         })
 
