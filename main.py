@@ -4026,7 +4026,7 @@ async def crear_sitio(
 async def editar_contacto(
     id_explora: int,
     descripcion: str = Form(None),
-    file: UploadFile = File(None),
+    imagen: UploadFile = File(None),
     categoria: str = Form(None)
 ):
     connection = mysql.connector.connect(**db_config)
@@ -4034,19 +4034,19 @@ async def editar_contacto(
 
     try:
         # Procesar la imagen si se proporciona
-        if file:
+        if imagen:
             # Guardar la imagen en una ubicación temporal
-            file_location = f"static/temp/{file.filename}"
+            file_location = f"static/temp/{imagen.filename}"
             with open(file_location, "wb") as buffer:
-                shutil.copyfileobj(file.file, buffer)
+                shutil.copyfileobj(imagen.file, buffer)
 
             # Mover la imagen a la ubicación final y asegurarse de que sea válida
-            final_location = f"static/images/explora/{file.filename}"
+            final_location = f"static/images/explora/{imagen.filename}"
             shutil.move(file_location, final_location)
             
             # Actualizar la base de datos con la información de la imagen
             query = "UPDATE explora SET descripcion = %s, categoria = %s, imagen = %s, ruta = %s WHERE id_explora = %s"
-            contacto_data = (descripcion, categoria, file.filename, final_location, id_explora)
+            contacto_data = (descripcion, categoria, imagen.filename, final_location, id_explora)
             cursor.execute(query, contacto_data)
             connection.commit()
 
@@ -4054,7 +4054,7 @@ async def editar_contacto(
                 'id_explora': id_explora,
                 'descripcion': descripcion,
                 'categoria': categoria,
-                'imagen': file.filename
+                'imagen': imagen.filename
             }
         else:
             # Si no se proporciona una imagen, actualizar solo los campos de texto
