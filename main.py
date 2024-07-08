@@ -4022,73 +4022,56 @@ async def crear_sitio(
         cursor.close()
         connection.close()
 
-@app.put("/explora/actualizar/{id_explora}", status_code=status.HTTP_200_OK, summary="Endpoint para actualizar un sitio en Explora", tags=['Explora'])
-async def actualizar_sitio(
+@app.put("/explora/editar/{id_explora}", status_code=status.HTTP_200_OK, summary="Endpoint para editar un sitio en Explora", tags=['Explora'])
+async def editar_contacto(
     id_explora: int,
-    nombre_sitio: str = Form(...),
-    descripcion: str = Form(...),
-    file: UploadFile = File(None)
+    descripcion: str = Form(None),
+    imagen: UploadFile = File(None),
+    categoria: str = Form(None)
 ):
     connection = mysql.connector.connect(**db_config)
     cursor = connection.cursor()
 
     try:
-        final_location = None
-        if file:
-            # Guardar temporalmente el archivo
-            file_location = f"static/temp/{file.filename}"
+        # Procesar la imagen si se proporciona
+        if imagen:
+            # Guardar la imagen en una ubicación temporal
+            file_location = f"static/temp/{imagen.filename}"
             with open(file_location, "wb") as buffer:
-                shutil.copyfileobj(file.file, buffer)
+                shutil.copyfileobj(imagen.file, buffer)
 
-            # Validar el tamaño de la imagen
-            try:
-                with Image.open(file_location) as img:
-                    if img.size < (200, 200):
-                        raise HTTPException(status_code=400, detail="La imagen debe tener al menos 200x200 píxeles")
-                    elif img.size > (9000, 9000):
-                        raise HTTPException(status_code=400, detail="La imagen debe tener como máximo 9000x9000 píxeles")
-            except Exception as e:
-                raise HTTPException(status_code=400, detail="Archivo de imagen inválido")
-
-            # Mover el archivo al directorio final
-            final_location = f"static/images/explora/{file.filename}"
+            # Mover la imagen a la ubicación final y asegurarse de que sea válida
+            final_location = f"static/images/explora/{imagen.filename}"
             shutil.move(file_location, final_location)
+            
+            # Actualizar la base de datos con la información de la imagen
+            query = "UPDATE explora SET descripcion = %s, categoria = %s, imagen = %s, ruta = %s WHERE id_explora = %s"
+            contacto_data = (descripcion, categoria, imagen.filename, 'static/images/instituciones/', id_explora)
+            cursor.execute(query, contacto_data)
+            connection.commit()
 
-        # Obtener la dirección actual del sitio
-        query_direccion = "SELECT direccion FROM explora WHERE id_explora = %s"
-        cursor.execute(query_direccion, (id_explora,))
-        direccion_actual = cursor.fetchone()
-        if not direccion_actual:
-            raise HTTPException(status_code=404, detail="Sitio no encontrado")
-
-        # Actualizar el sitio en la base de datos
-        if final_location:
-            query = "UPDATE explora SET nombre_sitio = %s, descripcion = %s, imagen = %s, ruta = %s WHERE id_explora = %s"
-            sitio_data = (nombre_sitio, descripcion, file.filename, final_location, id_explora)
-        else:
-            query = "UPDATE explora SET nombre_sitio = %s, descripcion = %s WHERE id_explora = %s"
-            sitio_data = (nombre_sitio, descripcion, id_explora)
-
-        cursor.execute(query, sitio_data)
-        connection.commit()
-
-        return JSONResponse(content={
-            'message': 'Sitio actualizado exitosamente',
-            'data': {
-                'nombre_sitio': nombre_sitio,
-                'direccion': direccion_actual[0],  # Mostrar la dirección actual
+            return {
+                'id_explora': id_explora,
                 'descripcion': descripcion,
-                'imagen': file.filename if final_location else None,
-                'ruta': final_location
+                'categoria': categoria,
+                'imagen': imagen.filename
             }
-        })
+        else:
+            # Si no se proporciona una imagen, actualizar solo los campos de texto
+            query = "UPDATE contactos SET descripcion = %s, categoria = %s WHERE id_explora = %s"
+            contacto_data = (descripcion, categoria, id_explora)
+            cursor.execute(query, contacto_data)
+            connection.commit()
 
+            return JSONResponse(content={
+                'id_explora': id_explora,
+                'descripcion': descripcion,
+                'categoria': categoria,
+                'imagen': "No se cambió la imagen"
+            })
     except mysql.connector.Error as err:
-        print(f"Error al actualizar sitio en la base de datos: {err}")
-        raise HTTPException(status_code=500, detail="Error interno al actualizar sitio")
-    except Exception as e:
-        print(f"Error inesperado: {e}")
-        raise HTTPException(status_code=500, detail="Error inesperado al procesar la solicitud")
+        print(f"Error al actualizar contacto en la base de datos: {err}")
+        raise HTTPException(status_code=500, detail="Error interno al actualizar contacto")
     finally:
         cursor.close()
         connection.close()
