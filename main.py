@@ -729,12 +729,14 @@ async def crear_aviso(
 @app.put("/aviso/editar/{id_aviso}", status_code=status.HTTP_200_OK, summary="Endpoint para editar un aviso existente en el carrusel de imágenes", tags=['Carrusel'])
 async def editar_aviso(
     id_aviso: int,
-    estado: str = Form(...),
+    estado: int = Form(...),
     url: str = Form(...),
     file: UploadFile = File(None)  # Archivo opcional para la edición
 ):
-     # Convertir estado a número entero
-    estado_int = 1 if estado == '1' else 0
+    if estado not in [0, 1]:
+        raise HTTPException (status_code=400, detail="El valor de 'estado'  debe ser '0' o '1'")
+
+    estado = str(estado)
 
     # Conectar a la base de datos
     connection = mysql.connector.connect(**db_config)
