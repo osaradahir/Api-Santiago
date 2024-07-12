@@ -9,6 +9,8 @@ from typing import Optional, List
 import mysql.connector
 import jwt
 import datetime
+from ftplib import FTP
+from config import db_config, ftp_config
 
 # Librerias para imagenes
 from PIL import Image
@@ -26,22 +28,6 @@ from geopy.geocoders import Nominatim
 
 app = FastAPI()
 
-
-# Configuración de la base de datos si esta en la nube 
-db_config = {
-     'host': '151.106.97.153',
-     'user': 'u880599588_test',
-     'password': 'HCwf9J9a',
-     'database': 'u880599588_test'
-}
-# Configuracion de la base de datos si esta de forma local
-#db_config ={    
-#   'host': 'localhost',
-#    'user': 'root',
-#    'password': '',
-#    'database': 'presidencia'
-#    } 
-
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -49,6 +35,12 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+def ftp_connect():
+    ftp = FTP()
+    ftp.connect(ftp_config['host'], ftp_config['port'])
+    ftp.login(ftp_config['user'], ftp_config['passwd'])
+    return ftp
 
 # Modelo de datos
 class Usuario(BaseModel):
@@ -81,8 +73,6 @@ class Contacto(BaseModel):
     facebook: str
     x: str
     youtube: str
-
-
 
 class Bot(BaseModel):
     nombre: str
@@ -129,8 +119,8 @@ class Articulo(BaseModel):
 class Fraccion(BaseModel):
     fraccion: str
     descripcion: str
-    area: str
     num_articulo: int
+    areas: list[int]  # Lista de ids de áreas
 
 class Año(BaseModel):
     año: int
@@ -183,6 +173,18 @@ app.mount("/static", StaticFiles(directory="static"),name="static")
 
 geolocator = Nominatim(user_agent="my-unique-application")
 
+def create_ftp_directory(ftp, path):
+    # Divide el path en sus componentes y crea cada uno si no existe
+    dirs = path.split("/")
+    path = ""
+    for dir in dirs:
+        if dir:
+            path += f"/{dir}"
+            try:
+                ftp.mkd(path)
+            except Exception as e:
+                # Si el directorio ya existe, no hacer nada
+                pass
 
 # Endpoint raiz
 @app.get("/", status_code=status.HTTP_200_OK, summary="Endpoint raiz", tags=['Root'])
@@ -277,7 +279,7 @@ def iniciar_sesion(credenciales: Credenciales):
         raise HTTPException(status_code=403, detail="Usuario no activo")
     else:
         raise HTTPException(status_code=401, detail="Credenciales incorrectas")
-# Para el modulo de Usuarios
+
 # Listar todos los usuarios (sin la contraseña)
 @app.get("/usuario", status_code=status.HTTP_200_OK, summary="Endpoint para listar datos de usuarios", tags=['Usuario'])
 def listar_usuarios():
@@ -467,79 +469,112 @@ def listar_logo():
         cursor.close()
         connection.close()
 
-@app.post("/logo/subir",status_code=status.HTTP_200_OK, summary="Endpoint para subir un logo a la pagina", tags=['Logo'])
+@app.post("/logo/subir", status_code=status.HTTP_200_OK, summary="Endpoint para subir un logo a la página", tags=['Logo'])
 async def subir_logo(file: UploadFile = File(...)):
-    # Comprobar la extensión del archivo
     connection = mysql.connector.connect(**db_config)
     cursor = connection.cursor()
 
-    if not file.filename.lower().endswith(".png"):
-        raise HTTPException(status_code=400, detail="Solo se permiten archivos con extension .png")
-
-    # Guardar temporalmente el archivo
-    file_location = f"static/temp/{file.filename}"
-    with open(file_location, "wb") as buffer:
-        shutil.copyfileobj(file.file, buffer)
-
-    # Abrir la imagen y comprobar el tamaño
     try:
-        with Image.open(file_location) as img:
+        # Comprobar la extensión del archivo
+        if not file.filename.lower().endswith(".png"):
+            raise HTTPException(status_code=400, detail="Solo se permiten archivos con extensión .png")
+
+        # Guardar temporalmente el archivo
+        temp_file_location = f"static/temp/{file.filename}"
+        with open(temp_file_location, "wb") as buffer:
+            shutil.copyfileobj(file.file, buffer)
+
+        # Abrir la imagen y comprobar el tamaño
+        with Image.open(temp_file_location) as img:
             if img.size < (200, 200):
                 raise HTTPException(status_code=400, detail="El logo tiene que ser mayor a 200x200")
             elif img.size > (9000, 9000):
                 raise HTTPException(status_code=400, detail="El logo tiene que ser menor a 9000x9000")
+
+        # Configurar la conexión FTP usando la función ftp_connect
+        with ftp_connect() as ftp:
+            ftp_path = f"/static/images/logos"
+            create_ftp_directory(ftp, ftp_path)
+            ftp_file_location = f"{ftp_path}/{file.filename}"
+
+            # Subir el archivo al servidor FTP
+            with open(temp_file_location, "rb") as f:
+                ftp.storbinary(f"STOR {ftp_file_location}", f)
+
+            # Generar la URL pública del archivo
+            base_url = "https://test.santiagotulantepec.com"
+            file_url = f"{base_url}{ftp_file_location}"
+
+        # Mover el archivo temporal al directorio final si pasa las validaciones
+        final_location = f"static/images/logos/{file.filename}"
+        shutil.move(temp_file_location, final_location)
+
+        # Actualizar la base de datos con la nueva ubicación del logo
+        update_query = "UPDATE logo SET imagen = %s, ruta = %s WHERE id_logo = 1"
+        cursor.execute(update_query, (file.filename, file_url))
+        connection.commit()
+
+        return JSONResponse(content={"filename": file.filename})
+
+    except mysql.connector.Error as err:
+        print(f"Error MySQL al subir el logo: {err}")
+        raise HTTPException(status_code=500, detail="Error interno al subir logo")
+
     except Exception as e:
-        raise HTTPException(status_code=400, detail="Invalid image file")
+        print(f"Error al subir el logo: {e}")
+        raise HTTPException(status_code=500, detail="Error interno al subir logo")
 
-    # Mover el archivo al directorio final si pasa las validaciones
-    final_location = f"static/images/logos/{file.filename}" # Ubicacion del archivo
-    shutil.move(file_location, final_location)
-
-    query = """
-            UPDATE logo
-            SET imagen = %s, ruta = %s
-            WHERE id_logo = 1
-        """
-    usuario_data = (file.filename,"static/images/logos/")
-    cursor.execute(query, usuario_data)
-    connection.commit()
-
-    return JSONResponse(content={"filename": file.filename})
-
+    finally:
+        cursor.close()
+        connection.close()
 @app.post("/logo/borrar", status_code=status.HTTP_200_OK, summary="Endpoint para borrar el logo actual", tags=['Logo'])
 async def borrar_logo():
     connection = mysql.connector.connect(**db_config)
     cursor = connection.cursor()
 
-    # Obtener el nombre del archivo actual
-    cursor.execute("SELECT imagen FROM logo WHERE id_logo = 1")
-    result = cursor.fetchone()
-    if result is None:
-        raise HTTPException(status_code=404, detail="Logo no encontrado")
+    try:
+        # Obtener el nombre del archivo actual desde la base de datos
+        cursor.execute("SELECT imagen FROM logo WHERE id_logo = 1")
+        result = cursor.fetchone()
+        if result is None:
+            raise HTTPException(status_code=404, detail="Logo no encontrado")
 
-    current_filename = result[0]
-    default_filename = "default_icon.png"
-    default_path = "static/images/logos/"
+        current_filename = result[0]
+        default_filename = "default_icon.png"
+        default_path = "static/images/logos/"
 
-    # Actualizar la base de datos con el nombre del archivo por defecto
-    query = """
+        # Configurar la conexión FTP usando la función ftp_connect
+        with ftp_connect() as ftp:
+            # Eliminar el archivo del servidor FTP si no es el archivo por defecto
+            if current_filename != default_filename:
+                ftp_file_path = f"{default_path}/{current_filename}"
+                try:
+                    ftp.delete(ftp_file_path)
+                except Exception as e:
+                    print(f"Error al eliminar el archivo del FTP: {e}")
+
+        # Actualizar la base de datos con el nombre del archivo por defecto
+        update_query = """
             UPDATE logo
             SET imagen = %s, ruta = %s
             WHERE id_logo = 1
         """
-    cursor.execute(query, (default_filename, default_path))
-    connection.commit()
+        cursor.execute(update_query, (default_filename, default_path))
+        connection.commit()
 
-    # Borrar el archivo físico si no es el archivo por defecto
-    if current_filename != default_filename:
-        current_file_path = os.path.join(default_path, current_filename)
-        if os.path.exists(current_file_path):
-            os.remove(current_file_path)
+        return JSONResponse(content={"message": "Logo borrado y reemplazado por el ícono por defecto"})
 
-    cursor.close()
-    connection.close()
+    except mysql.connector.Error as err:
+        print(f"Error MySQL al borrar el logo: {err}")
+        raise HTTPException(status_code=500, detail="Error interno al borrar logo")
 
-    return JSONResponse(content={"message": "Logo borrado y reemplazado por el ícono por defecto"})
+    except Exception as e:
+        print(f"Error al borrar el logo: {e}")
+        raise HTTPException(status_code=500, detail="Error interno al borrar logo")
+
+    finally:
+        cursor.close()
+        connection.close()
 
 @app.get("/avisos",status_code=status.HTTP_200_OK, summary="Endpoint para listar los avisos de la pagina", tags=['Carrusel'])
 def listar_avisos():
@@ -628,46 +663,66 @@ async def crear_aviso(
     estado: int = Form(...),
     url: str = Form(...),
     file: UploadFile = File(...)
-): 
-    # Validar valores de estado y permisos
+):
+    # Validar valores de estado
     if estado not in [0, 1]:
         raise HTTPException(status_code=400, detail="El valor de 'estado' debe ser '0' o '1'")
         
-    estado = str(estado) # Convertimos a str el estado y permisos para que no tome como posicion el valor
     # Conectar a la base de datos
     connection = mysql.connector.connect(**db_config)
     cursor = connection.cursor()
 
-    # Guardar temporalmente el archivo
-    file_location = f"static/temp/{file.filename}"
-    with open(file_location, "wb") as buffer:
-        shutil.copyfileobj(file.file, buffer)
-
-    # Abrir la imagen y comprobar el tamaño
     try:
+        # Guardar temporalmente el archivo
+        file_location = f"static/temp/{file.filename}"
+        with open(file_location, "wb") as buffer:
+            shutil.copyfileobj(file.file, buffer)
+
+        # Abrir la imagen y comprobar el tamaño
         with Image.open(file_location) as img:
             if img.size < (200, 200):
-                raise HTTPException(status_code=400, detail="La imagen tiene que ser mayor a 200x200")
-            elif img.size > (9000, 9000):
-                raise HTTPException(status_code=400, detail="La imagen tiene que ser menor a 9000x9000")
+                raise HTTPException(status_code=400, detail="La imagen debe ser mayor a 200x200 píxeles")
+            elif img.size > (30000, 30000):
+                raise HTTPException(status_code=400, detail="La imagen debe ser menor a 9000x9000 píxeles")
+
+        # Mover el archivo al directorio final si pasa las validaciones
+        final_location = f"static/images/carrusel/{file.filename}"
+        shutil.move(file_location, final_location)
+
+        # Subir el archivo al servidor FTP con la ruta completa
+        ftp_path = "/static/images/carrusel"
+        with ftp_connect() as ftp:
+            create_ftp_directory(ftp, ftp_path)
+            file_full_path = f"{ftp_path}/{file.filename}"
+            with open(final_location, 'rb') as f:
+                ftp.storbinary(f"STOR {file_full_path}", f)
+
+        # Generar la URL pública del archivo
+        base_url = "https://test.santiagotulantepec.com"
+        file_url = f"{base_url}{file_full_path}"
+
+        # Insertar datos en la base de datos incluyendo la URL del archivo
+        insert_query = 'INSERT INTO carrusel (imagen, ruta, estado, url) VALUES (%s, %s, %s, %s)'
+        data = (file.filename, file_url, estado, url)
+        cursor.execute(insert_query, data)
+        connection.commit()
+
+        # Formato de respuesta
+        response_data = {
+            "id_aviso": cursor.lastrowid,  # Obtener el ID del último aviso insertado
+            "imagen": file.filename,
+            "ruta": file_url,
+            "estado": str(estado),
+            "url": url
+        }
+        return JSONResponse(content=response_data)
+
     except Exception as e:
-        raise HTTPException(status_code=400, detail="Invalid image file")
+        raise HTTPException(status_code=500, detail=f"Error interno del servidor: {str(e)}")
 
-    # Mover el archivo al directorio final si pasa las validaciones
-    final_location = f"static/images/carrusel/{file.filename}"
-    shutil.move(file_location, final_location)
-
-    # Insertar datos en la base de datos
-    query = 'INSERT INTO carrusel (imagen, ruta, estado, url) VALUES (%s,%s,%s,%s)'
-    usuario_data = (file.filename, "static/images/carrusel/", estado, url)
-    cursor.execute(query, usuario_data)
-    connection.commit()
-
-    return JSONResponse(content={
-        "filename": file.filename,
-        "estado": estado,
-        "url": url        
-    })
+    finally:
+        cursor.close()
+        connection.close()
 
 @app.put("/aviso/editar/{id_aviso}", status_code=status.HTTP_200_OK, summary="Endpoint para editar un aviso existente en el carrusel de imágenes", tags=['Carrusel'])
 async def editar_aviso(
@@ -678,48 +733,75 @@ async def editar_aviso(
 ):
     if estado not in [0, 1]:
         raise HTTPException(status_code=400, detail="El valor de 'estado' debe ser '0' o '1'")
-    estado = str(estado) # Convertimos a str el estado y permisos para que no tome como posicion el valor
+        
     # Conectar a la base de datos
     connection = mysql.connector.connect(**db_config)
     cursor = connection.cursor()
 
-    if file:
-        # Guardar temporalmente el archivo
-        file_location = f"static/temp/{file.filename}"
-        with open(file_location, "wb") as buffer:
-            shutil.copyfileobj(file.file, buffer)
+    try:
+        if file:
+            # Guardar temporalmente el archivo
+            file_location = f"static/temp/{file.filename}"
+            with open(file_location, "wb") as buffer:
+                shutil.copyfileobj(file.file, buffer)
 
-        # Abrir la imagen y comprobar el tamaño
-        try:
+            # Abrir la imagen y comprobar el tamaño
             with Image.open(file_location) as img:
                 if img.size < (200, 200):
-                    raise HTTPException(status_code=400, detail="La imagen tiene que ser mayor a 200x200")
+                    raise HTTPException(status_code=400, detail="La imagen debe ser mayor a 200x200 píxeles")
                 elif img.size > (9000, 9000):
-                    raise HTTPException(status_code=400, detail="La imagen tiene que ser menor a 9000x9000")
-        except Exception as e:
-            raise HTTPException(status_code=400, detail="Invalid image file")
+                    raise HTTPException(status_code=400, detail="La imagen debe ser menor a 9000x9000 píxeles")
 
-        # Mover el archivo al directorio final si pasa las validaciones
-        final_location = f"static/images/carrusel/{file.filename}"
-        shutil.move(file_location, final_location)
+            # Mover el archivo al directorio final si pasa las validaciones
+            final_location = f"static/images/carrusel/{file.filename}"
+            shutil.move(file_location, final_location)
 
-        # Actualizar los datos en la base de datos
-        query = 'UPDATE carrusel SET imagen=%s, ruta=%s, estado=%s, url=%s WHERE id_imagen=%s'
-        usuario_data = (file.filename, "static/images/carrusel/", estado, url, id_aviso)
-    else:
-        # Actualizar los datos en la base de datos sin cambiar la imagen
-        query = 'UPDATE carrusel SET estado=%s, url=%s WHERE id_imagen=%s'
-        usuario_data = (estado, url, id_aviso)
+            # Subir el archivo al servidor FTP con la ruta completa
+            ftp_path = "/static/images/carrusel"
+            with ftp_connect() as ftp:
+                create_ftp_directory(ftp, ftp_path)
+                file_full_path = f"{ftp_path}/{file.filename}"
+                with open(final_location, 'rb') as f:
+                    ftp.storbinary(f"STOR {file_full_path}", f)
 
-    cursor.execute(query, usuario_data)
-    connection.commit()
 
-    return JSONResponse(content={
-        "aviso_id": id_aviso,
-        "estado": estado,
-        "url": url,
-        "filename": file.filename if file else "No se cambió la imagen"
-    })
+            # Generar la URL pública del archivo en el servidor FTP
+            base_url = "https://test.santiagotulantepec.com"
+            file_url = f"{base_url}{file_full_path}"
+
+            # Actualizar los datos en la base de datos incluyendo la URL del archivo
+            update_query = 'UPDATE carrusel SET imagen=%s, ruta=%s, estado=%s, url=%s WHERE id_imagen=%s'
+            data = (file.filename, file_url, estado, url, id_aviso)
+            cursor.execute(update_query, data)
+        else:
+            # Actualizar los datos en la base de datos sin cambiar la imagen
+            update_query = 'UPDATE carrusel SET estado=%s, url=%s WHERE id_imagen=%s'
+            data = (estado, url, id_aviso)
+            cursor.execute(update_query, data)
+
+        connection.commit()
+
+        # Preparar la respuesta JSON
+        response_data = {
+            "aviso_id": id_aviso,
+            "estado": estado,
+            "url": url,
+            "filename": file.filename if file else "No se cambió la imagen"
+        }
+        return JSONResponse(content=response_data)
+
+    except mysql.connector.Error as err:
+        print(f"Error MySQL al editar el aviso: {err}")
+        raise HTTPException(status_code=500, detail="Error interno al editar aviso")
+
+    except Exception as e:
+        print(f"Error al procesar la edición del aviso: {e}")
+        raise HTTPException(status_code=500, detail="Error interno al procesar edición aviso")
+
+    finally:
+        cursor.close()
+        connection.close()
+
 
 @app.delete("/aviso/borrar/{id_aviso}", status_code=status.HTTP_200_OK, summary="Endpoint para borrar un aviso existente en el carrusel de imágenes", tags=['Carrusel'])
 async def borrar_aviso(id_aviso: int):
@@ -727,26 +809,50 @@ async def borrar_aviso(id_aviso: int):
     connection = mysql.connector.connect(**db_config)
     cursor = connection.cursor()
 
-    # Verificar si el aviso existe y obtener la información del archivo
-    cursor.execute("SELECT imagen FROM carrusel WHERE id_imagen=%s", (id_aviso,))
-    aviso = cursor.fetchone()
-    
-    if not aviso:
-        raise HTTPException(status_code=404, detail="Aviso no encontrado")
+    try:
+        # Obtener el nombre del archivo y la ruta desde la base de datos
+        cursor.execute("SELECT imagen FROM carrusel WHERE id_imagen=%s", (id_aviso,))
+        aviso = cursor.fetchone()
 
-    # Obtener el nombre del archivo
-    file_name = aviso[0]
-    file_path = f"static/images/carrusel/{file_name}"
+        if not aviso:
+            raise HTTPException(status_code=404, detail="Aviso no encontrado")
 
-    # Eliminar el aviso de la base de datos
-    cursor.execute("DELETE FROM carrusel WHERE id_imagen=%s", (id_aviso,))
-    connection.commit()
+        file_name = aviso[0]
+        file_path = f"static/images/carrusel/{file_name}"
 
-    # Eliminar el archivo de imagen si existe
-    if os.path.exists(file_path):
-        os.remove(file_path)
+        # Conectar al servidor FTP y eliminar el archivo si existe
+        with ftp_connect() as ftp:
+            if ftp:
+                ftp_path = "/static/images/carrusel"
+                ftp_file_path = f"{ftp_path}/{file_name}"
+                
+                # Eliminar el archivo del servidor FTP si existe
+                try:
+                    ftp.delete(ftp_file_path)
+                except Exception as e:
+                    print(f"Error al borrar archivo en FTP: {e}")
 
-    return JSONResponse(content={"message": "Aviso borrado correctamente", "aviso_id": id_aviso})
+        # Eliminar el aviso de la base de datos
+        cursor.execute("DELETE FROM carrusel WHERE id_imagen=%s", (id_aviso,))
+        connection.commit()
+
+        # Eliminar el archivo localmente si existe
+        if os.path.exists(file_path):
+            os.remove(file_path)
+
+        return JSONResponse(content={"message": "Aviso borrado correctamente", "aviso_id": id_aviso})
+
+    except mysql.connector.Error as err:
+        print(f"Error MySQL al borrar el aviso: {err}")
+        raise HTTPException(status_code=500, detail="Error interno al borrar aviso")
+
+    except Exception as e:
+        print(f"Error al procesar la solicitud de borrado del aviso: {e}")
+        raise HTTPException(status_code=500, detail="Error interno al procesar borrado aviso")
+
+    finally:
+        cursor.close()
+        connection.close()
 
 @app.get("/ubicacion",status_code=status.HTTP_200_OK, summary="Endpoint para listar todas las ubicaciones existentes", tags=['Mapa-Ubicaciones'])
 def listar_ubicaciones():
@@ -1011,7 +1117,7 @@ async def editar_contacto(
     try:
         # Procesar la imagen si se proporciona
         if imagen:
-            # Guardar la imagen en una ubicación temporal
+             # Guardar la imagen en una ubicación temporal
             file_location = f"static/temp/{imagen.filename}"
             with open(file_location, "wb") as buffer:
                 shutil.copyfileobj(imagen.file, buffer)
@@ -1020,9 +1126,20 @@ async def editar_contacto(
             final_location = f"static/images/instituciones/{imagen.filename}"
             shutil.move(file_location, final_location)
             
+            # Subir la imagen al servidor FTP con la ruta completa
+            ftp_path = "/static/images/instituciones"
+            with ftp_connect() as ftp:
+                create_ftp_directory(ftp, ftp_path)
+                with open(final_location, 'rb') as f:
+                    ftp.storbinary(f"STOR {ftp_path}/{imagen.filename}", f)
+
+            # Generar la URL pública del archivo en el servidor FTP
+            base_url = "https://test.santiagotulantepec.com"
+            imagen_url = f"{base_url}{ftp_path}/{imagen.filename}"
+
             # Actualizar la base de datos con la información de la imagen
             query = "UPDATE contactos SET telefono = %s, email = %s, facebook = %s, x = %s, youtube = %s, imagen = %s, ruta = %s WHERE id_contactos = %s"
-            contacto_data = (telefono, email, facebook, x, youtube, imagen.filename, 'static/images/instituciones/', id_contacto)
+            contacto_data = (telefono, email, facebook, x, youtube, imagen.filename, imagen_url, id_contacto)
             cursor.execute(query, contacto_data)
             connection.commit()
 
@@ -1077,6 +1194,7 @@ def borrar_contacto(id_contacto: int):
     connection.commit()
 
     return JSONResponse(content={"message": "Contacto borrado correctamente", "id_contacto": id_contacto})
+
 
 @app.get("/noticia",status_code=status.HTTP_200_OK, summary="Endpoint para listar todas las noticias existentes", tags=['Noticias'])
 def listar_noticias():
@@ -1163,9 +1281,20 @@ async def crear_noticia(
     final_location = f"static/images/noticias/{file.filename}"
     shutil.move(file_location, final_location)
 
+    # Subir la imagen al servidor FTP con la ruta completa
+    ftp_path = "/static/images/noticias"
+    with ftp_connect() as ftp:
+        create_ftp_directory(ftp, ftp_path)
+        with open(final_location, 'rb') as f:
+            ftp.storbinary(f"STOR {ftp_path}/{file.filename}", f)
+
+            # Generar la URL pública del archivo en el servidor FTP
+    base_url = "https://test.santiagotulantepec.com"
+    imagen_url = f"{base_url}{ftp_path}/{file.filename}"
+
     # Insertar datos en la base de datos
     query = 'INSERT INTO noticias (titulo, contenido, imagen, ruta) VALUES (%s,%s,%s,%s)'
-    usuario_data = (titulo, contenido,file.filename, 'static/images/noticias/')
+    usuario_data = (titulo, contenido,file.filename, imagen_url)
     cursor.execute(query, usuario_data)
     connection.commit()
 
@@ -1173,9 +1302,8 @@ async def crear_noticia(
         'titulo': titulo,
         'contenido':contenido,
         'imagen': file.filename,
-        'ruta':'static/images/noticias/'
+        'ruta': imagen_url
     })
-
 @app.put("/noticia/editar/{id_noticia}", status_code=status.HTTP_200_OK, summary="Endpoint para editar una noticia existente", tags=['Noticias'])
 async def editar_noticia(
     id_noticia: int,
@@ -1187,42 +1315,69 @@ async def editar_noticia(
     connection = mysql.connector.connect(**db_config)
     cursor = connection.cursor()
 
-    if file:
-        # Guardar temporalmente el archivo
-        file_location = f"static/temp/{file.filename}"
-        with open(file_location, "wb") as buffer:
-            shutil.copyfileobj(file.file, buffer)
+    try:
+        if file:
+            # Guardar temporalmente el archivo
+            file_location = f"static/temp/{file.filename}"
+            with open(file_location, "wb") as buffer:
+                shutil.copyfileobj(file.file, buffer)
 
-        # Abrir la imagen y comprobar el tamaño
-        try:
-            with Image.open(file_location) as img:
-                if img.size < (200, 200):
-                    raise HTTPException(status_code=400, detail="La imagen tiene que ser mayor a 200x200")
-                elif img.size > (9000, 9000):
-                    raise HTTPException(status_code=400, detail="La imagen tiene que ser menor a 9000x9000")
-        except Exception as e:
-            raise HTTPException(status_code=400, detail="Invalid image file")
+            # Abrir la imagen y comprobar el tamaño
+            try:
+                with Image.open(file_location) as img:
+                    if img.size < (200, 200):
+                        raise HTTPException(status_code=400, detail="La imagen tiene que ser mayor a 200x200")
+                    elif img.size > (9000, 9000):
+                        raise HTTPException(status_code=400, detail="La imagen tiene que ser menor a 9000x9000")
+            except Exception as e:
+                raise HTTPException(status_code=400, detail="Archivo de imagen no válido")
 
-        # Mover el archivo al directorio final si pasa las validaciones
-        final_location = f"static/images/noticias/{file.filename}"
-        shutil.move(file_location, final_location)
+            # Mover el archivo al directorio final si pasa las validaciones
+            final_location = f"static/images/noticias/{file.filename}"
+            shutil.move(file_location, final_location)
 
-        # Actualizar los datos en la base de datos
-        query = 'UPDATE noticias SET titulo=%s, contenido=%s, imagen=%s WHERE id_noticia=%s'
-        usuario_data = (titulo,contenido,file.filename,id_noticia)
-    else:
-        # Actualizar los datos en la base de datos sin cambiar la imagen
-        query = 'UPDATE noticias SET titulo=%s, contenido=%s WHERE id_noticia=%s'
-        usuario_data = (titulo,id_noticia)
+            # Subir la imagen al servidor FTP con la ruta completa
+            ftp_path = "/static/images/noticias"
+            with ftp_connect() as ftp:
+                create_ftp_directory(ftp, ftp_path)
+                with open(final_location, 'rb') as f:
+                    ftp.storbinary(f"STOR {ftp_path}/{file.filename}", f)
 
-    cursor.execute(query, usuario_data)
-    connection.commit()
+            # Generar la URL pública del archivo en el servidor FTP
+            base_url = "https://test.santiagotulantepec.com"
+            imagen_url = f"{base_url}{ftp_path}/{file.filename}"
 
-    return JSONResponse(content={
-        "id_noticia": id_noticia,
-        "titulo": titulo,
-        "imagen": file.filename if file else "No se cambió la imagen"        
-    })
+            # Actualizar los datos en la base de datos
+            query = 'UPDATE noticias SET titulo=%s, contenido=%s, imagen=%s, ruta=%s WHERE id_noticia=%s'
+            usuario_data = (titulo, contenido, file.filename, imagen_url, id_noticia)
+        else:
+            # Actualizar los datos en la base de datos sin cambiar la imagen
+            query = 'UPDATE noticias SET titulo=%s, contenido=%s WHERE id_noticia=%s'
+            usuario_data = (titulo, contenido, id_noticia)
+
+        cursor.execute(query, usuario_data)
+        connection.commit()
+
+        return JSONResponse(content={
+            "id_noticia": id_noticia,
+            "titulo": titulo,
+            "contenido": contenido,
+            "imagen": file.filename if file else "No se cambió la imagen",
+            "ruta": imagen_url if file else "Ruta no cambiada"
+        })
+
+    except mysql.connector.Error as err:
+        print(f"Error al actualizar noticia en la base de datos: {err}")
+        raise HTTPException(status_code=500, detail="Error interno al actualizar noticia")
+
+    except Exception as e:
+        print(f"Error al procesar la edición de noticia: {e}")
+        raise HTTPException(status_code=500, detail="Error interno al procesar edición de noticia")
+
+    finally:
+        cursor.close()
+        connection.close()
+
 
 @app.delete("/noticia/borrar/{id_noticia}", status_code=status.HTTP_200_OK, summary="Endpoint para borrar una noticia existente", tags=['Noticias'])
 async def borrar_noticia(id_noticia: int):
@@ -1230,30 +1385,46 @@ async def borrar_noticia(id_noticia: int):
     connection = mysql.connector.connect(**db_config)
     cursor = connection.cursor()
 
-    # Verificar si el aviso existe y obtener la información del archivo
-    cursor.execute("SELECT * FROM noticias WHERE id_noticia=%s", (id_noticia,))
-    aviso = cursor.fetchone()
-    
-    if not aviso:
-        raise HTTPException(status_code=404, detail="Noticia no encontrada")
-    
-    cursor.execute("SELECT imagen FROM noticias WHERE id_noticia=%s", (id_noticia,))
-    aviso = cursor.fetchone()
-    
+    try:
+        # Verificar si la noticia existe y obtener la ruta de la imagen
+        cursor.execute("SELECT imagen FROM noticias WHERE id_noticia=%s", (id_noticia,))
+        aviso = cursor.fetchone()
+        
+        if not aviso:
+            raise HTTPException(status_code=404, detail="Noticia no encontrada")
+        
+        # Obtener la ruta completa del archivo
+        imagen = aviso[0]
 
-    # Obtener el nombre del archivo
-    file_name = aviso[0]
-    file_path = f"static/images/noticias/{file_name}"
+        # Conectar al servidor FTP y eliminar el archivo
+        ftp = ftp_connect()
+        
+        # Construir la ruta completa del archivo en el servidor FTP
+        ftp_path = f"/static/images/noticias"
+        file_location = f"{ftp_path}/{imagen}"
 
-    # Eliminar el aviso de la base de datos
-    cursor.execute("DELETE FROM noticias WHERE id_noticia=%s", (id_noticia,))
-    connection.commit()
+        # Intentar eliminar el archivo del servidor FTP
+        try:
+            ftp.delete(file_location)
+        except Exception as e:
+            print(f"Error al eliminar archivo del servidor FTP: {e}")
 
-    # Eliminar el archivo de imagen si existe
-    if os.path.exists(file_path):
-        os.remove(file_path)
 
-    return JSONResponse(content={"message": "Noticia borrada correctamente", "id_noticia": id_noticia})
+        # Eliminar la noticia de la base de datos
+        cursor.execute("DELETE FROM noticias WHERE id_noticia=%s", (id_noticia,))
+        connection.commit()
+
+        return JSONResponse(content={"message": "Noticia borrada correctamente", "id_noticia": id_noticia})
+
+    except mysql.connector.Error as err:
+        print(f"Error al borrar la noticia en la base de datos: {err}")
+        raise HTTPException(status_code=500, detail="Error interno al borrar noticia")
+    except Exception as e:
+        print(f"Error al procesar la solicitud: {e}")
+        raise HTTPException(status_code=500, detail="Error interno al procesar solicitud")
+    finally:
+        cursor.close()
+        connection.close()
 
 @app.get("/evento",status_code=status.HTTP_200_OK, summary="Endpoint para listar todos los eventos existentes", tags=['Eventos'])
 def listar_eventos():
@@ -1340,9 +1511,20 @@ def crear_evento(
     
     final_location = f"static/images/eventos/{file.filename}"
     shutil.move(file_location, final_location)
+    
+    # Subir la imagen al servidor FTP con la ruta completa
+    ftp_path = "/static/images/eventos"
+    with ftp_connect() as ftp:
+        create_ftp_directory(ftp, ftp_path)
+        with open(final_location, 'rb') as f:
+            ftp.storbinary(f"STOR {ftp_path}/{file.filename}", f)
+
+            # Generar la URL pública del archivo en el servidor FTP
+    base_url = "https://test.santiagotulantepec.com"
+    imagen_url = f"{base_url}{ftp_path}/{file.filename}"
 
     query = "INSERT INTO eventos (titulo, descripcion, fecha, hora, imagen, ruta) VALUES (%s, %s, %s, %s, %s, %s)"
-    evento_data = (titulo, descripcion, fecha, hora, file.filename, 'static/images/eventos/')
+    evento_data = (titulo, descripcion, fecha, hora, file.filename, imagen_url)
     cursor.execute(query, evento_data)
     connection.commit()
     return {
@@ -1351,7 +1533,7 @@ def crear_evento(
         'fecha': fecha,
         'hora': hora,
         'imagen': file.filename,
-        'ruta': 'static/images/eventos/'
+        'ruta': imagen_url
     }
 
 @app.put("/evento/editar/{id_evento}", status_code=status.HTTP_200_OK, summary="Endpoint para editar un evento", tags=['Eventos'])
@@ -1386,9 +1568,20 @@ def editar_evento(
         final_location = f"static/images/eventos/{file.filename}"
         shutil.move(file_location, final_location)
 
+        # Subir la imagen al servidor FTP con la ruta completa
+        ftp_path = "/static/images/eventos"
+        with ftp_connect() as ftp:
+            create_ftp_directory(ftp, ftp_path)
+            with open(final_location, 'rb') as f:
+                ftp.storbinary(f"STOR {ftp_path}/{file.filename}", f)
+
+        # Generar la URL pública del archivo en el servidor FTP
+        base_url = "https://test.santiagotulantepec.com"
+        imagen_url = f"{base_url}{ftp_path}/{file.filename}"
+
         # Actualizar los datos en la base de datos
-        query = 'UPDATE eventos SET titulo=%s, descripcion=%s, fecha=%s, hora=%s, imagen=%s WHERE id_evento=%s'
-        evento_data = (titulo, descripcion, fecha, hora, file.filename, id_evento)
+        query = 'UPDATE eventos SET titulo=%s, descripcion=%s, fecha=%s, hora=%s, imagen=%s, ruta=%s WHERE id_evento=%s'
+        evento_data = (titulo, descripcion, fecha, hora, file.filename, imagen_url, id_evento)
 
     else:
         # Actualizar los datos en la base de datos sin cambiar la imagen
@@ -1411,28 +1604,36 @@ def editar_evento(
         "imagen": file.filename if file else "No se cambió la imagen"
     })
 
-# Borrar un evento existente
+# Borrar un event
 @app.delete("/evento/borrar/{id_evento}", status_code=status.HTTP_200_OK, summary="Endpoint para borrar un evento", tags=['Eventos'])
 def borrar_evento(id_evento: int):
     connection = mysql.connector.connect(**db_config)
     cursor = connection.cursor()
 
-    cursor.execute("SELECT * FROM eventos WHERE id_evento=%s", (id_evento,))
+    cursor.execute("SELECT imagen FROM eventos WHERE id_evento=%s", (id_evento,))
     evento = cursor.fetchone()
-    
+
     if not evento:
         raise HTTPException(status_code=404, detail="Evento no encontrado")
 
-    file_name = evento[5]
-    file_path = f"static/images/eventos/{file_name}"
+    imagen = evento[0]
+    ftp = ftp_connect()
+    
+    # Construir la ruta completa del archivo en el servidor FTP
+    ftp_path = f"/static/images/eventos"
+    file_location = f"{ftp_path}/{imagen}"
+
+    # Intentar eliminar el archivo del servidor FTP
+    try:
+        ftp.delete(file_location)
+    except Exception as e:
+        print(f"Error al eliminar archivo del servidor FTP: {e}")
 
     cursor.execute("DELETE FROM eventos WHERE id_evento=%s", (id_evento,))
     connection.commit()
 
-    if os.path.exists(file_path):
-        os.remove(file_path)
-
     return JSONResponse(content={"message": "Evento borrado correctamente", "id_evento": id_evento})
+
 
 @app.get("/bot",status_code=status.HTTP_200_OK, summary="Endpoint para listar todos los contactos existentes", tags=['ChatBot'])
 def listar_bot():
@@ -2374,31 +2575,60 @@ def borrar_articulo(id_articulo: int):
 
     return JSONResponse(content={"message": "Articulo borrado correctamente", "id_articulo": id_articulo})
 
-@app.get("/fraccion",status_code=status.HTTP_200_OK, summary="Endpoint para listar todas las fracciones existentes", tags=['Fracciones'])
+# Endpoint para listar todas las fracciones
+@app.get("/fraccion", status_code=status.HTTP_200_OK, summary="Endpoint para listar todas las fracciones existentes", tags=['Fracciones'])
 def listar_fraccion():
-    connection = mysql.connector.connect(**db_config)
-    cursor = connection.cursor()
     try:
+        connection = mysql.connector.connect(**db_config)
+        cursor = connection.cursor()
+        
         cursor.execute("SELECT * FROM fracciones")
         datos = cursor.fetchall()
+        
         if datos:
             respuesta = []
             for row in datos:
+                # Obtener las áreas de la fracción
+                areas = obtener_areas_por_fraccion(cursor, row[0])
+                
                 dato = {
-                    'id_fraccion':row[0],
-                    'fraccion':row[1],
+                    'id_fraccion': row[0],
+                    'fraccion': row[1],
                     'descripcion': row[2],
-                    'area': row[3],
-                    'num_articulo': row[4]
+                    'num_articulo': row[3],
+                    'areas': areas
+
                 }
                 respuesta.append(dato)
             
             return respuesta
         else:
             raise HTTPException(status_code=404, detail="No hay fracciones en la Base de datos")
+    
+    except mysql.connector.Error as e:
+        raise HTTPException(status_code=500, detail=f"Error al conectar con la base de datos: {str(e)}")
+    
     finally:
         cursor.close()
         connection.close()
+
+# Función para obtener las áreas de una fracción específica
+def obtener_areas_por_fraccion(cursor, id_fraccion):
+    query = """
+    SELECT a.id_area, a.nombre_area
+    FROM areas a
+    JOIN fracciones_areas fa ON a.id_area = fa.id_area
+    WHERE fa.id_fraccion = %s
+    """
+    cursor.execute(query, (id_fraccion,))
+    areas = []
+    for area in cursor.fetchall():
+        area_dict = {
+            'id_area': area[0],
+            'nombre_area': area[1]
+        }
+        areas.append(area_dict)
+    return areas
 
 @app.get("/fraccion/{id_fraccion}",status_code=status.HTTP_200_OK, summary="Endpoint para buscar fracciones en la bd", tags=['Fracciones'])
 def detalle_fraccion(id_fraccion:int):
@@ -2411,12 +2641,13 @@ def detalle_fraccion(id_fraccion:int):
         if datos:
             respuesta = []
             for row in datos:
+                areas = obtener_areas_por_fraccion(cursor, row[0])
                 dato = {
                     'id_fraccion':row[0],
                     'fraccion':row[1],
                     'descripcion': row[2],
-                    'area': row[3],
-                    'num_articulo': row[4]
+                    'num_articulo': row[3],
+                    'areas': areas
                 }
                 respuesta.append(dato)
 
@@ -2426,42 +2657,51 @@ def detalle_fraccion(id_fraccion:int):
     finally:
         cursor.close()
         connection.close()
-
+# Endpoint para buscar fracciones por área y/o número de artículo
 @app.get("/fracciones/busqueda", status_code=status.HTTP_200_OK, summary="Buscar fracciones por área y/o número de artículo", tags=['Fracciones'])
 def buscar_fracciones(area: str = Query(None, description="Nombre del área a buscar"), num_articulo: str = Query(None, description="Número del artículo a buscar")):
     connection = mysql.connector.connect(**db_config)
     cursor = connection.cursor()
 
-    # Contruir la consulta SQL dinámicamente según los parámetros proporcionados
-    base_query = "SELECT * FROM fracciones WHERE"
+    # Construir la consulta SQL dinámicamente según los parámetros proporcionados
+    base_query = """
+    SELECT f.id_fraccion, f.fraccion, f.descripcion, f.num_articulo
+    FROM fracciones f
+    LEFT JOIN fracciones_areas fa ON f.id_fraccion = fa.id_fraccion
+    LEFT JOIN areas a ON fa.id_area = a.id_area
+    """
     conditions = []
     parameters = []
 
     if area:
-        conditions.append(" area = %s")
+        conditions.append("a.nombre_area = %s")
         parameters.append(area)
 
     if num_articulo:
-        conditions.append(" num_articulo = %s")
+        conditions.append("f.num_articulo = %s")
         parameters.append(num_articulo)
 
     # Verifica que al menos un parámetro haya sido proporcionado
     if not conditions:
         raise HTTPException(status_code=400, detail="Debe proporcionar al menos un parámetro de búsqueda")
 
-    query = base_query + " AND".join(conditions)
+    query = base_query + " WHERE " + " AND ".join(conditions)
+    
     try:
         cursor.execute(query, parameters)
         datos = cursor.fetchall()
         if datos:
             respuesta = []
             for row in datos:
+                # Obtener las áreas de la fracción
+                areas = obtener_areas_por_fraccion(cursor, row[0])
+
                 dato = {
                     'id_fraccion': row[0],
                     'fraccion': row[1],
                     'descripcion': row[2],
-                    'area': row[3],
-                    'num_articulo': row[4]
+                    'num_articulo': row[3],
+                    'areas': areas
                 }
                 respuesta.append(dato)
             return respuesta
@@ -2471,73 +2711,203 @@ def buscar_fracciones(area: str = Query(None, description="Nombre del área a bu
         cursor.close()
         connection.close()
 
-@app.post("/fraccion/crear", status_code=status.HTTP_200_OK, summary="Endpoint para crear una fraccion", tags=['Fracciones'])
-def crear_fraccion(fraccion:Fraccion):
+# Función para obtener las áreas de una fracción específica
+def obtener_areas_por_fraccion(cursor, id_fraccion):
+    query = """
+    SELECT a.id_area, a.nombre_area
+    FROM areas a
+    JOIN fracciones_areas fa ON a.id_area = fa.id_area
+    WHERE fa.id_fraccion = %s
+    """
+    cursor.execute(query, (id_fraccion,))
+    areas = []
+    for area in cursor.fetchall():
+        area_dict = {
+            'id_area': area[0],
+            'nombre_area': area[1]
+        }
+        areas.append(area_dict)
+    return areas
+
+@app.post("/fraccion/crear", status_code=status.HTTP_200_OK, summary="Endpoint para crear una fracción", tags=['Fracciones'])
+def crear_fraccion(fraccion: Fraccion):
+    print("Datos recibidos:", fraccion)  # Agrega esta línea para ver los datos recibidos
     connection = mysql.connector.connect(**db_config)
     cursor = connection.cursor()
     try:
-        # Insertar una respesta cerrada en la base de datos
-        query = "INSERT INTO fracciones (fraccion, descripcion, area, num_articulo) VALUES (%s, %s, %s, %s)"
-        evento_data = (fraccion.fraccion, fraccion.descripcion, fraccion.area, fraccion.num_articulo)
-        cursor.execute(query, evento_data)
+        # Insertar fracción en la base de datos
+        query = "INSERT INTO fracciones (fraccion, descripcion, num_articulo) VALUES (%s, %s, %s)"
+        fraccion_data = (fraccion.fraccion, fraccion.descripcion, fraccion.num_articulo)
+        cursor.execute(query, fraccion_data)
+        fraccion_id = cursor.lastrowid
+        
+        # Insertar relaciones en fracciones_areas
+        for area_id in fraccion.areas:
+            query = "INSERT INTO fracciones_areas (id_fraccion, id_area) VALUES (%s, %s)"
+            cursor.execute(query, (fraccion_id, area_id))
+        
         connection.commit()
         return {
-            'fraccion':fraccion.fraccion,
+            'fraccion': fraccion.fraccion,
             'descripcion': fraccion.descripcion,
-            'area': fraccion.area,
-            'id articulo': fraccion.num_articulo
+            'num_articulo': fraccion.num_articulo,
+            'areas': fraccion.areas
         }
     except mysql.connector.Error as err:
         # Manejar errores de la base de datos
-        print(f"Error al insertar fraccion en la base de datos: {err}")
-        raise HTTPException(status_code=500, detail="Error interno al crear una fraccion")
+        print(f"Error al insertar fracción en la base de datos: {err}")
+        raise HTTPException(status_code=500, detail="Error interno al crear una fracción")
     finally:
         cursor.close()
         connection.close()
 
-@app.put("/fraccion/editar/{id_fraccion}", status_code=status.HTTP_200_OK, summary="Endpoint para editar una fraccion", tags=['Fracciones'])
-def editar_fraccion(fraccion:Fraccion, id_fraccion: int):
+
+# Endpoint para editar una fracción
+@app.put("/fraccion/editar/{id_fraccion}", status_code=status.HTTP_200_OK, summary="Endpoint para editar una fracción", tags=['Fracciones'])
+def editar_fraccion(fraccion: Fraccion, id_fraccion: int):
     connection = mysql.connector.connect(**db_config)
-    cursor = connection.cursor()
+    cursor = connection.cursor(dictionary=True)  # Asegúrate de usar dictionary=True para obtener resultados como diccionarios
     try:
-        # Actualizar respuesta abierta en la base de datos
-        query = "UPDATE fracciones SET fraccion = %s, descripcion = %s, area = %s, num_articulo = %s WHERE id_fraccion = %s"
-        evento_data = (fraccion.fraccion, fraccion.descripcion, fraccion.area, fraccion.num_articulo, id_fraccion)
-        cursor.execute(query, evento_data)
+        # Obtener fracción actual
+        cursor.execute("SELECT * FROM fracciones WHERE id_fraccion = %s", (id_fraccion,))
+        fraccion_actual = cursor.fetchone()
+
+        if fraccion_actual is None:
+            raise HTTPException(status_code=404, detail="Fracción no encontrada")
+
+        # Verificar y actualizar los campos de la fracción
+        if fraccion.descripcion != fraccion_actual['descripcion'] or fraccion.num_articulo != fraccion_actual['num_articulo'] or fraccion.fraccion != fraccion_actual['fraccion']:
+            query = "UPDATE fracciones SET descripcion = %s, num_articulo = %s, fraccion = %s WHERE id_fraccion = %s"
+            cursor.execute(query, (fraccion.descripcion, fraccion.num_articulo, fraccion.fraccion, id_fraccion))
+
+        # Obtener áreas actuales relacionadas con la fracción
+        cursor.execute("SELECT id_area FROM fracciones_areas WHERE id_fraccion = %s", (id_fraccion,))
+        areas_actuales = [row['id_area'] for row in cursor.fetchall()]
+
+        # Determinar qué áreas agregar o eliminar
+        areas_a_agregar = set(fraccion.areas) - set(areas_actuales)
+        areas_a_eliminar = set(areas_actuales) - set(fraccion.areas)
+
+        # Agregar nuevas relaciones en fracciones_areas
+        for area_id in areas_a_agregar:
+            cursor.execute("INSERT INTO fracciones_areas (id_fraccion, id_area) VALUES (%s, %s)", (id_fraccion, area_id))
+
+        # Eliminar relaciones no deseadas en fracciones_areas
+        for area_id in areas_a_eliminar:
+            cursor.execute("DELETE FROM fracciones_areas WHERE id_fraccion = %s AND id_area = %s", (id_fraccion, area_id))
+
         connection.commit()
         return {
             'id_fraccion': id_fraccion,
-            'fraccion':fraccion.fraccion,
             'descripcion': fraccion.descripcion,
-            'area': fraccion.area,
-            'id articulo': fraccion.num_articulo
+            'num_articulo': fraccion.num_articulo,
+            'areas': fraccion.areas
         }
     except mysql.connector.Error as err:
         # Manejar errores de la base de datos
-        print(f"Error al actualizar la fraccion en la base de datos: {err}")
-        raise HTTPException(status_code=500, detail="Error interno al actualizar la fraccion")
+        print(f"Error al actualizar la fracción en la base de datos: {err}")
+        raise HTTPException(status_code=500, detail="Error interno al actualizar la fracción")
     finally:
         cursor.close()
         connection.close()
 
-@app.delete("/fraccion/borrar/{id_fraccion}", status_code=status.HTTP_200_OK, summary="Endpoint para borrar una fraccion", tags=['Fracciones'])
+
+
+@app.delete("/fraccion/borrar/{id_fraccion}", status_code=status.HTTP_200_OK, summary="Endpoint para borrar una fracción", tags=['Fracciones'])
 def borrar_fraccion(id_fraccion: int):
-    # Conectar a la base de datos
     connection = mysql.connector.connect(**db_config)
     cursor = connection.cursor()
 
-    # Verificar si la repuesta existe
-    cursor.execute("SELECT * FROM fracciones WHERE id_fraccion =%s", (id_fraccion,))
-    aviso = cursor.fetchone()
-    
-    if not aviso:
-        raise HTTPException(status_code=404, detail="Fraccion no encontrada")
+    # Verificar si la fracción existe
+    cursor.execute("SELECT * FROM fracciones WHERE id_fraccion = %s", (id_fraccion,))
+    fraccion = cursor.fetchone()
 
-    # Eliminar el aviso de la base de datos
-    cursor.execute("DELETE FROM fracciones WHERE id_fraccion =%s", (id_fraccion,))
-    connection.commit()
+    if not fraccion:
+        raise HTTPException(status_code=404, detail="Fracción no encontrada")
 
-    return JSONResponse(content={"message": "Fraccion borrada correctamente", "id_fraccion": id_fraccion})
+    # Obtener documentos relacionados a la fracción
+    cursor.execute("SELECT id_documento, documento, ruta FROM documentos WHERE id_fraccion = %s", (id_fraccion,))
+    documentos = cursor.fetchall()
+
+    try:
+        # Conectarse al servidor FTP
+        ftp = ftp_connect()
+        try:
+            for documento in documentos:
+                id_documento, documento_nombre, ruta = documento
+                try:
+                    ftp.delete(ruta)
+                except Exception as e:
+                    print(f"Error al eliminar archivo del servidor FTP: {e}")
+
+            ftp.quit()
+        except Exception as e:
+            print(f"Error al conectar con el servidor FTP: {e}")
+            ftp.quit()
+
+        # Eliminar documentos relacionados en la base de datos
+        cursor.execute("DELETE FROM documentos WHERE id_fraccion = %s", (id_fraccion,))
+        
+        # Eliminar relaciones en fracciones_areas
+        cursor.execute("DELETE FROM fracciones_areas WHERE id_fraccion = %s", (id_fraccion,))
+
+        # Eliminar la fracción de la base de datos
+        cursor.execute("DELETE FROM fracciones WHERE id_fraccion = %s", (id_fraccion,))
+
+        connection.commit()
+        return JSONResponse(content={"message": "Fracción y documentos relacionados borrados correctamente", "id_fraccion": id_fraccion})
+
+    except mysql.connector.Error as err:
+        print(f"Error al borrar la fracción y documentos en la base de datos: {err}")
+        raise HTTPException(status_code=500, detail="Error interno al borrar la fracción y documentos")
+
+    finally:
+        cursor.close()
+        connection.close()
+
+@app.get("/areas/{id_fraccion}", status_code=status.HTTP_200_OK, summary="Endpoint para obtener áreas de una fracción", tags=['Áreas'])
+def get_areas_fraccion(id_fraccion: int):
+    connection = mysql.connector.connect(**db_config)
+    cursor = connection.cursor(dictionary=True)
+    try:
+        query = """
+        SELECT a.id_area, a.nombre_area 
+        FROM fracciones_areas fa
+        JOIN areas a ON fa.id_area = a.id_area
+        WHERE fa.id_fraccion = %s
+        """
+        cursor.execute(query, (id_fraccion,))
+        areas = cursor.fetchall()
+        return areas
+    except mysql.connector.Error as err:
+        print(f"Error al obtener las áreas de la fracción: {err}")
+        raise HTTPException(status_code=500, detail="Error interno al obtener las áreas de la fracción")
+    finally:
+        cursor.close()
+        connection.close()
+
+@app.get("/areas",status_code=status.HTTP_200_OK, summary="Endpoint para listar todos los años existentes", tags=['Años'])
+def listar_areas():
+    connection = mysql.connector.connect(**db_config)
+    cursor = connection.cursor()
+    try:
+        cursor.execute("SELECT * FROM areas")
+        datos = cursor.fetchall()
+        if datos:
+            respuesta = []
+            for row in datos:
+                dato = {
+                    'id_area':row[0],
+                    'nombre_area':row[1],
+                }
+                respuesta.append(dato)
+            
+            return respuesta
+        else:
+            raise HTTPException(status_code=404, detail="No hay años en la Base de datos")
+    finally:
+        cursor.close()
+        connection.close()
 
 @app.get("/year",status_code=status.HTTP_200_OK, summary="Endpoint para listar todos los años existentes", tags=['Años'])
 def listar_años():
@@ -2733,24 +3103,31 @@ async def crear_documento(
         
         fraccion, articulo = fraccion_articulo
 
-        # Crear la ruta del archivo con la estructura especificada
-        directory = os.path.join(f"static/documents/transparencia/{str(articulo)}/{fraccion}/{str(año)}")
-        os.makedirs(directory, exist_ok=True)
-        file_location = os.path.join(f"{directory}/{file.filename}")
+        ftp = ftp_connect()
 
-        # Guardar el archivo localmente
-        with open(file_location, "wb") as f:
-            f.write(await file.read())
+         # Crear la ruta del archivo en el servidor FTP
+        ftp_path = f"/static/documents/transparencia/{str(articulo)}/{fraccion}/{str(año)}"
+        create_ftp_directory(ftp, ftp_path)
+        file_location = f"{ftp_path}/{file.filename}"
+
+        # Subir el archivo al servidor FTP
+        with file.file as f:
+            ftp.storbinary(f"STOR {file_location}", f)
+
+        # Generar la URL pública del archivo
+        base_url = "https://test.santiagotulantepec.com"
+        file_url = f"{base_url}{file_location}"
+
 
         # Insertar documento en la base de datos
         query = "INSERT INTO documentos (documento, ruta, trimestre, año, id_fraccion) VALUES (%s, %s ,%s, %s, %s)"
-        evento_data = (file.filename, directory, trimestre, año, id_fraccion)
+        evento_data = (file.filename, file_url, trimestre, año, id_fraccion)
         cursor.execute(query, evento_data)
         connection.commit()
         return {
             'id_documento': cursor.lastrowid,
             'documento': file.filename,
-            'ruta': directory,
+            'ruta': file_url,
             'trimestre': trimestre,
             'año': año,
             'id_fraccion': id_fraccion,
@@ -2764,7 +3141,6 @@ async def crear_documento(
         cursor.close()
         connection.close()
 
-#Endpoint para borrar un documento
 @app.delete("/documento/borrar/{id_documento}", status_code=status.HTTP_200_OK, summary="Endpoint para borrar un documento", tags=['Documentos'])
 def borrar_documento(id_documento: int):
     connection = mysql.connector.connect(**db_config)
@@ -2774,44 +3150,41 @@ def borrar_documento(id_documento: int):
         cursor.execute("SELECT documento, año, id_fraccion FROM documentos WHERE id_documento = %s", (id_documento,))
         documento_data = cursor.fetchone()
 
-        if documento_data:
-            documento, año, id_fraccion = documento_data
+        if not documento_data:
+            return JSONResponse(content={"message": "Documento no encontrado", "id_documento": id_documento}, status_code=404)
+        
+        documento, año, id_fraccion = documento_data
 
-            # Obtener fraccion y num_articulo desde la base de datos
-            cursor.execute("""
-                SELECT f.fraccion, a.num_articulo 
-                FROM fracciones f
-                JOIN articulos a ON f.num_articulo = a.num_articulo
-                WHERE f.id_fraccion = %s
-            """, (id_fraccion,))
-            fraccion_articulo = cursor.fetchone()
+        # Obtener fraccion y num_articulo desde la base de datos
+        cursor.execute("""
+            SELECT f.fraccion, a.num_articulo 
+            FROM fracciones f
+            JOIN articulos a ON f.num_articulo = a.num_articulo
+            WHERE f.id_fraccion = %s
+        """, (id_fraccion,))
+        fraccion_articulo = cursor.fetchone()
 
-            if fraccion_articulo:
-                fraccion, articulo = fraccion_articulo
+        if not fraccion_articulo:
+            raise HTTPException(status_code=404, detail="Fracción o artículo no encontrado")
+        
+        fraccion, articulo = fraccion_articulo
 
-                # Construir la ruta completa del archivo
-                file_location = os.path.join(f"static/documents/transparencia/{str(articulo)}/{fraccion}/{str(año)}/{documento}")
+        # Conectarse al servidor FTP y eliminar el archivo
+        ftp = ftp_connect()
+        try:
+            ftp_path = f"/static/documents/transparencia/{str(articulo)}/{fraccion}/{str(año)}/{documento}"
+            ftp.delete(ftp_path)
+        except Exception as e:
+            print(f"Error al eliminar archivo del servidor FTP: {e}")
+        finally:
+            ftp.quit()
 
-                # Eliminar el archivo localmente
-                if os.path.exists(file_location):
-                    os.remove(file_location)
-                else:
-                    print(f"Advertencia: Archivo no encontrado en el sistema de archivos: {file_location}")
-
-                # Eliminar el documento de la base de datos
-                cursor.execute("DELETE FROM documentos WHERE id_documento = %s", (id_documento,))
-                connection.commit()
-
-                return JSONResponse(content={"message": "Documento borrado correctamente", "id_documento": id_documento})
-            else:
-                print(f"Advertencia: Fracción o artículo no encontrado para el documento con ID: {id_documento}")
-
-        # Aunque no se encontró el documento, se intenta borrar el registro de la base de datos
+        # Eliminar el documento de la base de datos
         cursor.execute("DELETE FROM documentos WHERE id_documento = %s", (id_documento,))
         connection.commit()
 
-        return JSONResponse(content={"message": "Documento no encontrado, pero se eliminó el registro de la base de datos", "id_documento": id_documento})
-        
+        return JSONResponse(content={"message": "Documento borrado correctamente", "id_documento": id_documento})
+
     except mysql.connector.Error as err:
         print(f"Error al borrar el documento en la base de datos: {err}")
         raise HTTPException(status_code=500, detail="Error interno al borrar documento")
@@ -2994,7 +3367,7 @@ async def crear_funcionario(
     nombre_funcionario: str = Form(...),
     puesto: str = Form(...),
     institucion: str = Form(...),
-    telefono: int = Form(...),
+    telefono: str = Form(...),
     correo: str = Form(...),
     file: UploadFile = File(...)
 ):
@@ -3020,9 +3393,20 @@ async def crear_funcionario(
     final_location = f"static/images/funcionarios/{file.filename}"
     shutil.move(file_location, final_location)
 
+     # Subir la imagen al servidor FTP con la ruta completa
+    ftp_path = "/static/images/funcionarios"
+    with ftp_connect() as ftp:
+        create_ftp_directory(ftp, ftp_path)
+        with open(final_location, 'rb') as f:
+            ftp.storbinary(f"STOR {ftp_path}/{file.filename}", f)
+
+            # Generar la URL pública del archivo en el servidor FTP
+    base_url = "https://test.santiagotulantepec.com"
+    imagen_url = f"{base_url}{ftp_path}/{file.filename}"
+
     # Insertar datos en la base de datos
     query = 'INSERT INTO funcionarios (nombre_funcionario, puesto, institucion, telefono, correo, imagen, ruta) VALUES (%s,%s,%s,%s,%s,%s,%s)'
-    data = (nombre_funcionario, puesto, institucion, telefono, correo, file.filename, 'static/images/funcionarios/')
+    data = (nombre_funcionario, puesto, institucion, telefono, correo, file.filename, imagen_url)
     cursor.execute(query, data)
     connection.commit()
 
@@ -3033,7 +3417,7 @@ async def crear_funcionario(
         'telefono': telefono,
         'correo': correo,
         'imagen': file.filename,
-        'ruta': 'static/images/funcionarios/'
+        'ruta': imagen_url
     })
 
 @app.put("/funcionario/editar/{id_funcionario}", status_code=status.HTTP_200_OK, summary="Endpoint para editar un funcionario existente", tags=['Funcionarios'])
@@ -3042,44 +3426,75 @@ async def editar_funcionario(
     nombre_funcionario: str = Form(...),
     puesto: str = Form(...),
     institucion: str = Form(...),
-    telefono: int = Form(...),
+    telefono: str = Form(...),  # Cambiado a int si el teléfono es numérico en la base de datos
     correo: str = Form(...),
     file: UploadFile = File(None)
 ):
     connection = mysql.connector.connect(**db_config)
     cursor = connection.cursor()
 
-    if file:
-        file_location = f"static/temp/{file.filename}"
-        with open(file_location, "wb") as buffer:
-            shutil.copyfileobj(file.file, buffer)
+    try:
+        # Verificar si el funcionario existe
+        cursor.execute("SELECT imagen FROM funcionarios WHERE id_funcionario = %s", (id_funcionario,))
+        funcionario = cursor.fetchone()
 
-        try:
-            with Image.open(file_location) as img:
-                if img.size < (200, 200):
-                    raise HTTPException(status_code=400, detail="La imagen tiene que ser mayor a 200x200")
-                elif img.size > (9000, 9000):
-                    raise HTTPException(status_code=400, detail="La imagen tiene que ser menor a 9000x9000")
-        except Exception as e:
-            raise HTTPException(status_code=400, detail="Archivo de imagen inválido")
+        if not funcionario:
+            raise HTTPException(status_code=404, detail="Funcionario no encontrado")
 
-        final_location = f"static/images/funcionarios/{file.filename}"
-        shutil.move(file_location, final_location)
+        # Procesar el archivo de imagen si se proporciona
+        if file:
+            file_location = f"static/temp/{file.filename}"
+            with open(file_location, "wb") as buffer:
+                shutil.copyfileobj(file.file, buffer)
 
-        query = 'UPDATE funcionarios SET nombre_funcionario=%s, puesto=%s, institucion=%s, telefono=%s, correo=%s, imagen=%s, ruta=%s WHERE id_funcionario=%s'
-        data = (nombre_funcionario, puesto, institucion, telefono, correo, file.filename, 'static/images/funcionarios/', id_funcionario)
-    else:
-        query = 'UPDATE funcionarios SET nombre_funcionario=%s, puesto=%s, institucion=%s, telefono=%s, correo=%s WHERE id_funcionario=%s'
-        data = (nombre_funcionario, puesto, institucion, telefono, correo, id_funcionario)
+            try:
+                with Image.open(file_location) as img:
+                    if img.size < (200, 200):
+                        raise HTTPException(status_code=400, detail="La imagen debe ser mayor a 200x200")
+                    elif img.size > (9000, 9000):
+                        raise HTTPException(status_code=400, detail="La imagen debe ser menor a 9000x9000")
+            except Exception as e:
+                raise HTTPException(status_code=400, detail="Archivo de imagen inválido")
 
-    cursor.execute(query, data)
-    connection.commit()
+            final_location = f"static/images/funcionarios/{file.filename}"
+            shutil.move(file_location, final_location)
 
-    return JSONResponse(content={
-        "id_funcionario": id_funcionario,
-        "nombre_funcionario": nombre_funcionario,
-        "imagen": file.filename if file else "No se cambió la imagen"
-    })
+            # Subir la imagen al servidor FTP con la ruta completa
+            ftp_path = "/static/images/funcionarios"
+            with ftp_connect() as ftp:
+                create_ftp_directory(ftp, ftp_path)
+                with open(final_location, 'rb') as f:
+                    ftp.storbinary(f"STOR {ftp_path}/{file.filename}", f)
+
+            # Generar la URL pública del archivo en el servidor FTP
+            base_url = "https://test.santiagotulantepec.com"
+            imagen_url = f"{base_url}{ftp_path}/{file.filename}"
+
+            # Actualizar la base de datos con la nueva información incluyendo la imagen
+            query = 'UPDATE funcionarios SET nombre_funcionario=%s, puesto=%s, institucion=%s, telefono=%s, correo=%s, imagen=%s, ruta=%s WHERE id_funcionario=%s'
+            data = (nombre_funcionario, puesto, institucion, telefono, correo, file.filename, imagen_url, id_funcionario)
+        else:
+            # Actualizar la base de datos sin cambiar la imagen
+            query = 'UPDATE funcionarios SET nombre_funcionario=%s, puesto=%s, institucion=%s, telefono=%s, correo=%s WHERE id_funcionario=%s'
+            data = (nombre_funcionario, puesto, institucion, telefono, correo, id_funcionario)
+
+        cursor.execute(query, data)
+        connection.commit()
+
+        return JSONResponse(content={
+            "id_funcionario": id_funcionario,
+            "nombre_funcionario": nombre_funcionario,
+            "imagen": file.filename if file else "No se cambió la imagen"
+        })
+
+    except mysql.connector.Error as err:
+        print(f"Error al editar funcionario en la base de datos: {err}")
+        raise HTTPException(status_code=500, detail="Error interno al editar funcionario")
+
+    finally:
+        cursor.close()
+        connection.close()
+
 
 @app.delete("/funcionario/borrar/{id_funcionario}", status_code=status.HTTP_200_OK, summary="Endpoint para borrar un funcionario existente", tags=['Funcionarios'])
 async def borrar_funcionario(id_funcionario: int):
@@ -3095,14 +3510,21 @@ async def borrar_funcionario(id_funcionario: int):
     cursor.execute("SELECT imagen FROM funcionarios WHERE id_funcionario=%s", (id_funcionario,))
     funcionario = cursor.fetchone()
 
-    file_name = funcionario[0]
-    file_path = f"static/images/funcionarios/{file_name}"
+    imagen = funcionario[0]
+    ftp = ftp_connect()
+    
+    # Construir la ruta completa del archivo en el servidor FTP
+    ftp_path = f"/static/images/funcionarios"
+    file_location = f"{ftp_path}/{imagen}"
+
+    # Intentar eliminar el archivo del servidor FTP
+    try:
+        ftp.delete(file_location)
+    except Exception as e:
+        print(f"Error al eliminar archivo del servidor FTP: {e}")
 
     cursor.execute("DELETE FROM funcionarios WHERE id_funcionario=%s", (id_funcionario,))
     connection.commit()
-
-    if os.path.exists(file_path):
-        os.remove(file_path)
 
     return JSONResponse(content={"message": "Funcionario borrado correctamente", "id_funcionario": id_funcionario})
 
@@ -3189,18 +3611,23 @@ async def crear_exPresidente(
     except Exception as e:
         raise HTTPException(status_code=400, detail="Archivo de imagen inválido")
 
-    # Crear carpeta final si no existe
-    final_dir = "static/images/expresidentes/"
-    if not os.path.exists(final_dir):
-        os.makedirs(final_dir, exist_ok=True)
-
     # Mover el archivo al directorio final
-    final_location = f"{final_dir}/{file.filename}"
+    final_location = f"static/images/expresidentes/{file.filename}"
     shutil.move(file_location, final_location)
 
+     # Subir la imagen al servidor FTP con la ruta completa
+    ftp_path = "/static/images/expresidentes"
+    with ftp_connect() as ftp:
+        create_ftp_directory(ftp, ftp_path)
+        with open(final_location, 'rb') as f:
+            ftp.storbinary(f"STOR {ftp_path}/{file.filename}", f)
+
+            # Generar la URL pública del archivo en el servidor FTP
+    base_url = "https://test.santiagotulantepec.com"
+    imagen_url = f"{base_url}{ftp_path}/{file.filename}"
     # Insertar datos en la base de datos
     query = 'INSERT INTO expresidentes (nombre_expresidente, periodo, imagen, ruta) VALUES (%s,%s,%s,%s)'
-    data = (nombre_expresidente, periodo, file.filename, final_dir)
+    data = (nombre_expresidente, periodo, file.filename, imagen_url)
     cursor.execute(query, data)
     connection.commit()
 
@@ -3208,7 +3635,7 @@ async def crear_exPresidente(
         'nombre_expresidente': nombre_expresidente,
         'periodo': periodo,
         'imagen': file.filename,
-        'ruta': final_dir
+        'ruta': imagen_url
     })
 
 @app.put("/expresidente/editar/{id_expresidente}", status_code=status.HTTP_200_OK, summary="Endpoint para editar un expresidente existente", tags=['Expresidentes'])
@@ -3238,8 +3665,19 @@ async def editar_exPresidente(
         final_location = f"static/images/expresidentes/{imagen.filename}"
         shutil.move(file_location, final_location)
 
+         # Subir la imagen al servidor FTP con la ruta completa
+        ftp_path = "/static/images/expresidentes"
+        with ftp_connect() as ftp:
+            create_ftp_directory(ftp, ftp_path)
+            with open(final_location, 'rb') as f:
+                ftp.storbinary(f"STOR {ftp_path}/{imagen.filename}", f)
+
+                # Generar la URL pública del archivo en el servidor FTP
+        base_url = "https://test.santiagotulantepec.com"
+        imagen_url = f"{base_url}{ftp_path}/{imagen.filename}"
+
         query = 'UPDATE expresidentes SET nombre_expresidente=%s, periodo=%s, imagen=%s, ruta=%s WHERE id_expresidente=%s'
-        data = (nombre_expresidente, periodo, imagen.filename, 'static/images/expresidentes/', id_expresidente)
+        data = (nombre_expresidente, periodo, imagen.filename, imagen_url, id_expresidente)
     else:
         query = 'UPDATE expresidentes SET nombre_expresidente=%s, periodo=%s WHERE id_expresidente=%s'
         data = (nombre_expresidente, periodo, id_expresidente)
@@ -3268,13 +3706,20 @@ async def borrar_exPresidente(id_expresidente: int):
     exPresidente = cursor.fetchone()
 
     file_name = exPresidente[0]
-    file_path = f"static/images/expresidentes/{file_name}"
+    ftp = ftp_connect()
+    
+    # Construir la ruta completa del archivo en el servidor FTP
+    ftp_path = f"/static/images/funcionarios"
+    file_location = f"{ftp_path}/{file_name}"
+
+    # Intentar eliminar el archivo del servidor FTP
+    try:
+        ftp.delete(file_location)
+    except Exception as e:
+        print(f"Error al eliminar archivo del servidor FTP: {e}")
 
     cursor.execute("DELETE FROM expresidentes WHERE id_expresidente=%s", (id_expresidente,))
     connection.commit()
-
-    if os.path.exists(file_path):
-        os.remove(file_path)
 
     return JSONResponse(content={"message": "Expresidente borrado correctamente", "id_expresidente": id_expresidente})
 
@@ -3805,43 +4250,76 @@ async def crear_documento(
     nombre_fraccion: str = Form(...),
     año: str = Form(...),
     file: UploadFile = File(...)):
+
     connection = mysql.connector.connect(**db_config)
     cursor = connection.cursor()
     try:
-        # Crear la ruta del archivo con la estructura especificada
-        directory = f"static/conac/{nombre_fraccion}/{año}"
-        os.makedirs(directory, exist_ok=True)
-        file_location = os.path.join(directory, file.filename)
+        # Validar el nombre del tomo
+        cursor.execute("SELECT COUNT(*) FROM tomos WHERE nombre_tomo = %s", (nombre_tomo,))
+        if cursor.fetchone()[0] == 0:
+            raise HTTPException(status_code=400, detail="El nombre del tomo no es válido")
 
-        # Guardar el archivo localmente
-        with open(file_location, "wb") as f:
-            f.write(await file.read())
+        # Validar el nombre de la sección
+        cursor.execute("SELECT COUNT(*) FROM seccion WHERE nombre_seccion = %s", (nombre_seccion,))
+        if cursor.fetchone()[0] == 0:
+            raise HTTPException(status_code=400, detail="El nombre de la sección no es válido")
+
+        # Validar el nombre de la fracción
+        cursor.execute("SELECT COUNT(*) FROM fraccion_conac WHERE nombre_fraccion = %s", (nombre_fraccion,))
+        if cursor.fetchone()[0] == 0:
+            raise HTTPException(status_code=400, detail="El nombre de la fracción no es válido")
+
+        ftp = ftp_connect()
+        
+        try:
+            # Crear la ruta del archivo en el servidor FTP
+            ftp_path = f"/static/conac/{nombre_tomo}/{nombre_seccion}/{nombre_fraccion}/{año}"
+            create_ftp_directory(ftp, ftp_path)
+            file_location = f"{ftp_path}/{file.filename}"
+
+            # Subir el archivo al servidor FTP
+            with file.file as f:
+                ftp.storbinary(f"STOR {file_location}", f)
+        
+        except Exception as e:
+            print(f"Error al subir archivo al servidor FTP: {e}")
+            raise HTTPException(status_code=500, detail=f"Error al subir archivo al servidor FTP: {e}")
+        
+        finally:
+            ftp.quit()
+
+        # Generar la URL pública del archivo
+        base_url = "https://test.santiagotulantepec.com"
+        file_url = f"{base_url}{file_location}"
 
         # Insertar documento en la base de datos
         query = """
         INSERT INTO documento_conac (archivo, año, trimestre_categoria, ruta, nombre_tomo, nombre_seccion, nombre_fraccion)
         VALUES (%s, %s, %s, %s, %s, %s, %s)
         """
-        documento_data = (file.filename, año, trimestre_categoria, file_location, nombre_tomo, nombre_seccion, nombre_fraccion)
+        documento_data = (file.filename, año, trimestre_categoria, file_url, nombre_tomo, nombre_seccion, nombre_fraccion)
         cursor.execute(query, documento_data)
         connection.commit()
 
-        return {
+        return JSONResponse(content={
             'id_documento': cursor.lastrowid,
             'archivo': file.filename,
-            'año': año,
+            'ruta': file_url,
             'trimestre_categoria': trimestre_categoria,
-            'ruta': file_location,
+            'año': año,
             'nombre_tomo': nombre_tomo,
             'nombre_seccion': nombre_seccion,
             'nombre_fraccion': nombre_fraccion
-        }
+        })
+    
     except mysql.connector.Error as err:
         print(f"Error al insertar documento en la base de datos: {err}")
         raise HTTPException(status_code=500, detail="Error interno al crear documento")
+    
     finally:
         cursor.close()
         connection.close()
+
 
 @app.delete("/documento-conac/borrar/{id_documento}", status_code=status.HTTP_200_OK, summary="Endpoint para borrar un documento", tags=['Documentos-Conac'])
 def borrar_documento(id_documento: int):
@@ -3849,27 +4327,23 @@ def borrar_documento(id_documento: int):
     cursor = connection.cursor()
     try:
         # Verificar si el documento existe y obtener su ruta
-        cursor.execute("SELECT archivo, año, nombre_fraccion FROM documento_conac WHERE id_documento = %s", (id_documento,))
+        cursor.execute("SELECT archivo, año, nombre_tomo, nombre_seccion, nombre_fraccion FROM documento_conac WHERE id_documento = %s", (id_documento,))
         documento_data = cursor.fetchone()
         
         if documento_data:
-            archivo, año, nombre_fraccion = documento_data
+            archivo, año, nombre_tomo, nombre_seccion, nombre_fraccion = documento_data
 
-            # Construir la ruta completa del archivo
-            file_location = f"static/conac/{nombre_fraccion}/{año}/{archivo}"
+            # Construir la ruta completa del archivo en el FTP
+            file_location = f"/static/conac/{nombre_tomo}/{nombre_seccion}/{nombre_fraccion}/{año}/{archivo}"
 
-            # Eliminar el archivo localmente
-            if os.path.exists(file_location):
-                os.remove(file_location)
-            else:
-                print(f"Advertencia: Archivo no encontrado en el sistema de archivos: {file_location}")
-
-            # Eliminar el documento de la base de datos
-            cursor.execute("DELETE FROM documento_conac WHERE id_documento = %s", (id_documento,))
-            connection.commit()
-
-            return JSONResponse(content={"message": "Documento borrado correctamente", "id_documento": id_documento})
-        else:
+            # Conectar al servidor FTP y eliminar el archivo
+            ftp = ftp_connect()
+            try:
+                ftp.delete(file_location)
+            except Exception as e:
+                print(f"Error al eliminar archivo en el servidor FTP: {e}")
+                raise HTTPException(status_code=500, detail=f"Error al eliminar archivo en el servidor FTP: {e}")
+            
             # Aunque no se encontró el documento, se intenta borrar el registro de la base de datos
             cursor.execute("DELETE FROM documento_conac WHERE id_documento = %s", (id_documento,))
             connection.commit()
@@ -3974,9 +4448,6 @@ async def crear_sitio(
         except Exception as e:
             raise HTTPException(status_code=400, detail="Archivo de imagen inválido")
 
-        # Mover el archivo al directorio final
-        final_location = f"static/images/explora/{file.filename}"
-        shutil.move(file_location, final_location)
 
         # Si no se proporciona una dirección, buscarla usando el nombre del sitio
         if not direccion:
@@ -3993,10 +4464,25 @@ async def crear_sitio(
                     raise HTTPException(status_code=404, detail="No se pudo obtener la dirección a partir de las coordenadas")
             else:
                 raise HTTPException(status_code=404, detail="No existe esa ubicación en la Base de datos")
+            
+        # Mover el archivo al directorio final
+        final_location = f"static/images/explora/{file.filename}"
+        shutil.move(file_location, final_location)
+
+         # Subir la imagen al servidor FTP con la ruta completa
+        ftp_path = "/static/images/explora"
+        with ftp_connect() as ftp:
+            create_ftp_directory(ftp, ftp_path)
+            with open(final_location, 'rb') as f:
+                ftp.storbinary(f"STOR {ftp_path}/{file.filename}", f)
+
+            # Generar la URL pública del archivo en el servidor FTP
+        base_url = "https://test.santiagotulantepec.com"
+        imagen_url = f"{base_url}{ftp_path}/{file.filename}"
 
         # Insertar el nuevo sitio en la base de datos
         query = "INSERT INTO explora (nombre_sitio, direccion, descripcion, imagen, ruta, categoria) VALUES (%s, %s, %s, %s, %s, %s)"
-        sitio_data = (nombre_sitio, direccion, descripcion, file.filename, final_location, categoria)
+        sitio_data = (nombre_sitio, direccion, descripcion, file.filename, imagen_url, categoria)
         cursor.execute(query, sitio_data)
         connection.commit()
 
@@ -4007,7 +4493,7 @@ async def crear_sitio(
                 'direccion': direccion,
                 'descripcion': descripcion,
                 'imagen': file.filename,
-                'ruta': final_location,
+                'ruta': imagen_url,
                 'categoria': categoria
             }
         })
@@ -4043,10 +4529,21 @@ async def editar_contacto(
             # Mover la imagen a la ubicación final y asegurarse de que sea válida
             final_location = f"static/images/explora/{imagen.filename}"
             shutil.move(file_location, final_location)
+
+             # Subir la imagen al servidor FTP con la ruta completa
+            ftp_path = "/static/images/explora"
+            with ftp_connect() as ftp:
+                create_ftp_directory(ftp, ftp_path)
+                with open(final_location, 'rb') as f:
+                    ftp.storbinary(f"STOR {ftp_path}/{imagen.filename}", f)
+
+            # Generar la URL pública del archivo en el servidor FTP
+            base_url = "https://test.santiagotulantepec.com"
+            imagen_url = f"{base_url}{ftp_path}/{imagen.filename}"
             
             # Actualizar la base de datos con la información de la imagen
             query = "UPDATE explora SET descripcion = %s, categoria = %s, imagen = %s, ruta = %s WHERE id_explora = %s"
-            contacto_data = (descripcion, categoria, imagen.filename, final_location, id_explora)
+            contacto_data = (descripcion, categoria, imagen.filename, imagen_url, id_explora)
             cursor.execute(query, contacto_data)
             connection.commit()
 
@@ -4054,7 +4551,8 @@ async def editar_contacto(
                 'id_explora': id_explora,
                 'descripcion': descripcion,
                 'categoria': categoria,
-                'imagen': imagen.filename
+                'imagen': imagen.filename,
+                'ruta': imagen_url
             }
         else:
             # Si no se proporciona una imagen, actualizar solo los campos de texto
@@ -4083,22 +4581,31 @@ async def borrar_sitio(id_explora: int):
 
     try:
         # Obtener la información del sitio a borrar para eliminar la imagen del sistema de archivos
-        query_select = "SELECT imagen, ruta FROM explora WHERE id_explora = %s"
+        query_select = "SELECT imagen FROM explora WHERE id_explora = %s"
         cursor.execute(query_select, (id_explora,))
         sitio = cursor.fetchone()
         if not sitio:
             raise HTTPException(status_code=404, detail="Sitio no encontrado")
 
-        imagen, ruta = sitio
+        imagen = sitio[0]
+
+        # Conectar al servidor FTP y eliminar el archivo
+        ftp = ftp_connect()
+        ftp_path = "/static/images/funcionarios"
+        file_location = f"{ftp_path}/{imagen}"
+
+        try:
+            ftp.delete(file_location)
+        except Exception as e:
+            print(f"Error al eliminar archivo del servidor FTP: {e}")
+
+        finally:
+            ftp.quit()
 
         # Eliminar el sitio de la base de datos
         query_delete = "DELETE FROM explora WHERE id_explora = %s"
         cursor.execute(query_delete, (id_explora,))
         connection.commit()
-
-        # Eliminar la imagen del sistema de archivos
-        if ruta:
-            os.remove(ruta)
 
         return JSONResponse(content={
             'message': 'Sitio borrado exitosamente'
