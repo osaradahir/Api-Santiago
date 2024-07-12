@@ -657,14 +657,17 @@ def detalle_aviso(id_aviso:int):
     finally:
         cursor.close()
         connection.close()
+
 @app.post("/aviso/crear", status_code=status.HTTP_200_OK, summary="Endpoint para crear un aviso y que se vea reflejado en el carrusel de imágenes", tags=['Carrusel'])
 async def crear_aviso(
-    estado: str = Form(...),  # Recibir estado como cadena
+    estado: int = Form(...),  # Recibir estado como cadena
     url: str = Form(...),
     file: UploadFile = File(...)
 ):
-    # Convertir estado a número entero
-    estado_int = 1 if estado == '1' else 0
+    if estado not in [0, 1]:
+        raise HTTPException (status_code=400, detail="El valor de 'estado'  debe ser '0' o '1'")
+
+    estado = str(estado)
 
     # Conectar a la base de datos
     connection = mysql.connector.connect(**db_config)
@@ -701,7 +704,7 @@ async def crear_aviso(
 
         # Insertar datos en la base de datos incluyendo la URL del archivo
         insert_query = 'INSERT INTO carrusel (imagen, ruta, estado, url) VALUES (%s, %s, %s, %s)'
-        data = (file.filename, file_url, estado_int, url)
+        data = (file.filename, file_url, estado, url)
         cursor.execute(insert_query, data)
         connection.commit()
 
@@ -710,7 +713,7 @@ async def crear_aviso(
             "id_aviso": cursor.lastrowid,  # Obtener el ID del último aviso insertado
             "imagen": file.filename,
             "ruta": file_url,
-            "estado": str(estado_int),  # Devolver estado como cadena
+            "estado": estado,  # Devolver estado como cadena
             "url": url
         }
         return JSONResponse(content=response_data)
@@ -732,7 +735,7 @@ async def editar_aviso(
 ):
      # Convertir estado a número entero
     estado_int = 1 if estado == '1' else 0
-     
+
     # Conectar a la base de datos
     connection = mysql.connector.connect(**db_config)
     cursor = connection.cursor()
